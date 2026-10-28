@@ -99,10 +99,9 @@ The project includes automated end-to-end tests that spawn two visible game inst
 
 ---
 
-## Contributors & Credits
+## Credits
 
 - **Aldiyuar** — Project Creator & Lead Developer
-- **Gemini (Google DeepMind Antigravity)** — Senior AI Co-Developer & Reverse Engineer
 - **Brotato Team (Blobfish)** — Original Game
 - **GodotModLoader Community** — Mod Loader framework
 - **coop-anything** — Co-op Architecture & QA Playbooks
