@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# Logs & Screenshots
+*.log
+logs/
+screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# Operating System
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Bridge & Runtime Temporary Files
+bridge/*.json
+bridge/autopilot_decisions.log
+brotato.pid
+
+# Graphify Caches
+graphify-out/cache/
+*.sig
+
+# Local Decompiled Game Assets & Data (kept local to prevent copyright issues)
+DecompiledSource/
+DecompiledSource_DLC/

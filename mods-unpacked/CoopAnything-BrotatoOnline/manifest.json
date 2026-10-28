@@ -1,0 +1,21 @@
+{
+  "name": "BrotatoOnline",
+  "namespace": "CoopAnything",
+  "version_number": "0.1.0",
+  "website_url": "https://github.com/Vadim/BrotatoOnlineCoop",
+  "description": "Online Co-op multiplayer mod for Brotato 1.1+, built on native CoopService via Godot ENet.",
+  "dependencies": [],
+  "extra": {
+    "godot": {
+      "authors": [
+        "CoopAnything"
+      ],
+      "compatible_mod_loader_version": [
+        "6.3.0"
+      ],
+      "compatible_game_version": [
+        "1.1.15.1"
+      ]
+    }
+  }
+}

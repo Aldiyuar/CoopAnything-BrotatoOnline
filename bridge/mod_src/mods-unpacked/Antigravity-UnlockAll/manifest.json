@@ -1,0 +1,21 @@
+{
+  "name": "UnlockAll",
+  "namespace": "Antigravity",
+  "version_number": "1.1.1",
+  "website_url": "",
+  "description": "Unlocks all content, adds Dev Menu (F1), and AI Shop Autopilot (F2) with reroll loop.",
+  "dependencies": [],
+  "extra": {
+    "godot": {
+      "authors": [
+        "Antigravity"
+      ],
+      "compatible_mod_loader_version": [
+        "6.3.0"
+      ],
+      "compatible_game_version": [
+        "1.1.15.1"
+      ]
+    }
+  }
+}
