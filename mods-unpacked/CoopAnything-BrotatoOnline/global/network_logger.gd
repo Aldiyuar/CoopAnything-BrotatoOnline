@@ -1,7 +1,9 @@
 extends Object
 class_name NetworkLogger
 
-const LOG_FILE_PATH: String = "D:/Brotato_Coop_Test/logs/coop_all.log"
+const TEST_RIG_DIR: String = "D:/Brotato_Coop_Test/logs"
+const TEST_RIG_LOG_PATH: String = "D:/Brotato_Coop_Test/logs/coop_all.log"
+const PRIMARY_LOG_PATH: String = "user://logs/coop_all.log"
 const FALLBACK_LOG_PATH: String = "user://coop_all.log"
 
 static func info(msg: String, context: String = "CoopAnything") -> void:
@@ -29,8 +31,14 @@ static func _write_log(level: String, msg: String, context: String) -> void:
 	var pid = OS.get_process_id()
 	var line = "[%s] [PID:%d] [%s] [%s] %s\n" % [time_str, pid, level, context, msg]
 	
+	var dir = Directory.new()
+	var target_path = PRIMARY_LOG_PATH
+	if dir.dir_exists(TEST_RIG_DIR):
+		target_path = TEST_RIG_LOG_PATH
+	else:
+		dir.make_dir_recursive("user://logs")
+		
 	var f = File.new()
-	var target_path = LOG_FILE_PATH
 	var err = f.open(target_path, File.READ_WRITE)
 	if err != OK:
 		err = f.open(target_path, File.WRITE)

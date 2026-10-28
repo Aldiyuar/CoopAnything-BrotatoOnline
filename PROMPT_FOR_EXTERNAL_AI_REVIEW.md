@@ -10,7 +10,7 @@
 Проведи глубокий технический аудит и код-ревью репозитория сетевого мода **CoopAnything-BrotatoOnline** для игры **Brotato** (v1.1.15.1 + DLC Abyssal Terrors).
 
 ### ССЫЛКА НА РЕПОЗИТОРИЙ:
-👉 [Вставьте ссылку на ваш GitHub репозиторий, например: https://github.com/Aldiyuar/CoopAnything-BrotatoOnline]
+👉 https://github.com/Aldiyuar/CoopAnything-BrotatoOnline
 
 ---
 

@@ -97,8 +97,11 @@ func capture_screen(name: String) -> void:
 			if img:
 				img.flip_y()
 				var dir = Directory.new()
-				dir.make_dir_recursive("D:/Brotato_Coop_Test/screenshots")
-				var path = "D:/Brotato_Coop_Test/screenshots/%s_%s.png" % [name, str(OS.get_process_id())]
+				var shots_dir = "user://screenshots"
+				if dir.dir_exists("D:/Brotato_Coop_Test"):
+					shots_dir = "D:/Brotato_Coop_Test/screenshots"
+				dir.make_dir_recursive(shots_dir)
+				var path = "%s/%s_%s.png" % [shots_dir, name, str(OS.get_process_id())]
 				var err = img.save_png(path)
 				if err == OK:
 					NetworkLogger.success("[SCREENSHOT] Saved: %s" % path, "CoopAnything")

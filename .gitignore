@@ -19,9 +19,7 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
-# Bridge & Runtime Temporary Files
-bridge/*.json
-bridge/autopilot_decisions.log
+# Temporary Files
 brotato.pid
 
 # Graphify Caches
