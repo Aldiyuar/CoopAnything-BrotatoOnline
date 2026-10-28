@@ -43,7 +43,7 @@ class PROCESS_INFORMATION(ctypes.Structure):
     ]
 
 def launch_game_on_default_desktop(cmd_args):
-    """Spawns Brotato directly onto the user's interactive physical desktop (WinSta0\Default)."""
+    r"""Spawns Brotato directly onto the user's interactive physical desktop (WinSta0\Default)."""
     si = STARTUPINFOW()
     si.cb = ctypes.sizeof(STARTUPINFOW)
     si.lpDesktop = 'WinSta0\\Default'
