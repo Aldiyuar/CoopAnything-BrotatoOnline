@@ -33,7 +33,7 @@ func _setup_upgrades_network() -> void:
 	NetworkLogger.info("UpgradesUI: Initialized online upgrade/crate network hooks", "CoopAnything")
 	
 	var target_player = net.my_player_index
-	var player_container = _get_player_container(target_player) if target_player < _things_to_process_player_containers.size() else null
+	var player_container = _get_player_container(target_player) if (target_player < 4 and has_method("_get_player_container")) else null
 	if not player_container:
 		player_container = get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(target_player + 1))
 	if not player_container:

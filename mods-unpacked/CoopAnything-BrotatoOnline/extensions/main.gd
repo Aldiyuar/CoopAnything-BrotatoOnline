@@ -8,6 +8,7 @@ func _ready() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online():
 		net.network_enemies.clear()
+		net.ground_items.clear()
 		if net.is_client():
 			# Disconnect local wave manager so client never spawns rogue/unshared enemies
 			if _wave_manager and _entity_spawner:
@@ -55,6 +56,9 @@ func _physics_process(delta: float) -> void:
 					])
 			if p_batch.size() > 0:
 				net.rpc_unreliable("rpc_sync_player_positions", p_batch)
+	elif net and net.is_online() and net.is_client():
+		if _entity_spawner and "queue_to_spawn_summons" in _entity_spawner and _entity_spawner.queue_to_spawn_summons.size() > 0:
+			_entity_spawner.queue_to_spawn_summons.clear()
 
 func _on_player_died(p_player: Player, args: Entity.DieArgs) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
@@ -147,6 +151,12 @@ func _on_enemy_took_damage(
 	hit_type: int, 
 	is_one_shot: bool
 ) -> void:
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online() and net.is_client():
+		# Prevent local client-side weapon simulation from killing an enemy without Host authority
+		if is_instance_valid(enemy) and not enemy.get_meta("host_killed", false) and enemy.current_stats.health <= 0:
+			enemy.current_stats.health = 1
+			enemy.dead = false
 	._on_enemy_took_damage(enemy, value, knockback_direction, is_crit, is_dodge, is_protected, armor_did_something, args, hit_type, is_one_shot)
 	# Combat is strictly Host-Authoritative.
 	# Weapons of all players are simulated directly on the Host, and authoritative enemy HP
@@ -291,6 +301,7 @@ func on_gold_picked_up(gold: Node, player_index: int) -> void:
 		
 		if net.is_client():
 			if item_id != -1:
+				net.ground_items.erase(item_id)
 				net.rpc_id(1, "rpc_request_item_pickup", item_id, true, player_index)
 			return
 		elif net.is_host():
@@ -319,6 +330,7 @@ func on_consumable_picked_up(consumable: Node, player_index: int) -> void:
 		
 		if net.is_client():
 			if item_id != -1:
+				net.ground_items.erase(item_id)
 				net.rpc_id(1, "rpc_request_item_pickup", item_id, false, player_index)
 			return
 		elif net.is_host():
@@ -390,6 +402,18 @@ func on_levelled_up(player_index: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online() and net.is_host():
 		net.rpc("rpc_player_levelled_up", player_index, RunData.get_player_level(player_index))
+
+func on_upgrades_options_processed() -> void:
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online():
+		if net.is_client():
+			NetworkLogger.info("Client: All local upgrades chosen, waiting for Host scene transition...", "CoopAnything")
+			return
+		elif net.is_host():
+			var target_scene = MenuData.shop_scene if (MenuData and MenuData.shop_scene != "") else "res://ui/menus/shop/coop_shop.tscn"
+			NetworkLogger.info("Host: All upgrades chosen! Transitioning all players to shop scene: %s" % target_scene, "CoopAnything")
+			net.rpc("rpc_sync_change_scene", target_scene)
+	.on_upgrades_options_processed()
 
 func clean_up_room() -> void:
 	.clean_up_room()

@@ -80,6 +80,35 @@
   - `real_game_postwave_test.py`: 7/7 майлстоунов PASS, 0 ошибок.
   - `real_game_arena_test.py`: 8/8 майлстоунов PASS, 0 ошибок.
 
+### 2.7. Устранение скрытых блокеров магазина, сундуков и гонок лута (Аудит)
+- **Проблемы**:
+  1. Разрыв контракта витрины магазина: `rpc_confirm_shop_reroll` вызывался с 4 аргументами вместо 2, отсутствовали методы сериализации `_serialize_shop_items`, `_deserialize_shop_items` и RPC `rpc_sync_initial_shop_items`.
+  2. Двойная выдача лута из сундуков на Хосте: ручной `RunData.add_item` перед `container._on_TakeButton_pressed()` удваивал предметы у Хоста.
+  3. Ошибка парсера и преждевременное закрытие `UpgradesUI` на Клиенте: несуществующий идентификатор `_things_to_process_player_containers` вызывал SCRIPT ERROR, а локальный вызов `options_processed` менял сцену раньше Хоста.
+  4. Асинхронный `yield(..., "ready")` при спавне дропа: удаление монеты Хостом во время `yield` на Клиенте приводило к фантомным неудаляемым монетам.
+  5. Локальная гибель мобов на Клиенте от визуального урона пуль до подтверждения Хостом.
+  6. Спам в `coop_all.log` 60 раз в секунду из `rpc_send_player_input`.
+- **Решение**:
+  - В `global/network_manager.gd`:
+    - Реализованы `_serialize_shop_items`, `_deserialize_shop_items` и `remotesync func rpc_sync_initial_shop_items`.
+    - `rpc_confirm_shop_reroll` расширен до 4 аргументов с десериализацией и обновлением карточек витрины Клиента.
+    - Убран лишний `RunData.add_item` в `rpc_request_crate_take` и в тестовом шаге 1.
+    - В `rpc_spawn_ground_gold` и `rpc_spawn_ground_consumable` нода регистрируется в `ground_items` до `yield`, а после `yield` проверяется валидность.
+    - В `close_session()` добавлена очистка `network_enemies.clear()`.
+    - Логирование инпута в `rpc_send_player_input` ограничено событием перехода из покоя.
+  - В `extensions/ui/menus/ingame/upgrades_ui.gd`:
+    - Ошибка `_things_to_process_player_containers` устранена, контейнер берется через `_get_player_container`.
+  - В `extensions/main.gd`:
+    - Добавлен перехват `on_upgrades_options_processed`: Клиент блокирует локальный переход и ожидает сетевой смены сцены от Хоста.
+    - В `_on_enemy_took_damage` на Клиенте здоровье моба удерживается `>= 1` до подтверждения гибели Хостом (`host_killed`).
+    - На Клиенте в `on_gold_picked_up` и `on_consumable_picked_up` добавлен `net.ground_items.erase(item_id)`.
+    - В `_physics_process` Клиента подавляется локальная очередь призывов `_entity_spawner.queue_to_spawn_summons`.
+    - В `_ready()` добавлена очистка `net.ground_items.clear()`.
+- **Верификация**:
+  - `real_game_postwave_test.py`: 7/7 майлстоунов PASS, 0 ошибок.
+  - `real_game_arena_test.py`: 8/8 майлстоунов PASS, 0 ошибок.
+  - `real_game_death_test.py`: 9/9 майлстоунов PASS, 0 ошибок.
+
 ---
 
 ## 3. Статус автоматических тестов (Real Game Testing)
