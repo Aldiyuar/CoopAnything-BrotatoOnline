@@ -63,8 +63,9 @@ Brotato_Project/
 │   └── build_full_graph.py          # Graphify AST knowledge graph generator
 ├── graphify-out/                    # Architecture knowledge graph (AST)
 ├── MODLOG.md                        # Verified engineering change log
-├── PROMPT_FOR_AI_TESTER.md          # Comprehensive AI developer prompt
-└── PROMPT_FOR_EXTERNAL_AI_REVIEW.md # Prompt for external AI audit & review
+├── MOD_ARCHITECTURE.md              # Master technical specification & mod architecture
+├── PROMPT_ONBOARDING_DEVELOPER.md   # Prompt to onboard an AI developer to the project
+└── PROMPT_FULL_AUDIT.md             # Prompt for deep independent AI audit & code review
 ```
 
 ---
