@@ -363,8 +363,10 @@ remote func rpc_send_player_input(movement_x: float, movement_y: float, aim_x: f
 				if is_instance_valid(p) and not p.dead:
 					var client_pos = Vector2(pos_x, pos_y)
 					var dist = p.global_position.distance_to(client_pos)
-					if dist > 80.0:
-						p.global_position = p.global_position.linear_interpolate(client_pos, 0.3)
+					if dist > 300.0:
+						p.global_position = client_pos
+					elif dist > 150.0:
+						p.global_position = p.global_position.linear_interpolate(client_pos, 0.15)
 
 remotesync func rpc_player_died(player_index: int) -> void:
 	if is_client():
@@ -399,14 +401,15 @@ puppet func rpc_sync_player_positions(p_batch: Array) -> void:
 						if not p.dead:
 							if p_idx != my_player_index:
 								var dist = p.global_position.distance_to(target_pos)
-								if dist > 150.0:
+								if dist > 250.0:
 									p.global_position = target_pos
-								else:
-									p.global_position = p.global_position.linear_interpolate(target_pos, 0.45)
+								p.set_meta("net_target_pos", target_pos)
 							else:
 								var dist = p.global_position.distance_to(target_pos)
-								if dist > 60.0:
-									p.global_position = p.global_position.linear_interpolate(target_pos, 0.25)
+								if dist > 350.0:
+									p.global_position = target_pos
+								elif dist > 180.0:
+									p.global_position = p.global_position.linear_interpolate(target_pos, 0.15)
 							p.current_stats.health = hp
 							if main_scene.has_method("_on_player_health_updated"):
 								main_scene._on_player_health_updated(p, hp, p.max_stats.health)
@@ -415,6 +418,8 @@ remotesync func rpc_sync_change_scene(path: String) -> void:
 	if path == "" or path == "res://":
 		NetworkLogger.warn("rpc_sync_change_scene called with invalid path: '%s'" % path, "CoopAnything")
 		return
+	network_enemies.clear()
+	ground_items.clear()
 	if is_client():
 		NetworkLogger.info("Client: Syncing scene to %s from Host" % path, "CoopAnything")
 		var err = get_tree().change_scene(path)
@@ -614,6 +619,7 @@ remotesync func rpc_spawn_network_enemy(net_id: int, scene_path: String, pos_x: 
 				enemy.set_meta("net_id", net_id)
 				network_enemies[net_id] = enemy
 				enemy.global_position = Vector2(pos_x, pos_y)
+				enemy.set_meta("net_target_pos", enemy.global_position)
 				enemy.current_stats.health = hp
 				enemy.max_stats.health = hp
 				NetworkLogger.info("Client: Spawned shared enemy %d (%s) at (%.0f, %.0f)" % [net_id, scene_path.get_file(), pos_x, pos_y], "CoopAnything")
@@ -630,6 +636,7 @@ remotesync func rpc_spawn_network_neutral(net_id: int, scene_path: String, pos_x
 				neutral.set_meta("net_id", net_id)
 				network_enemies[net_id] = neutral
 				neutral.global_position = Vector2(pos_x, pos_y)
+				neutral.set_meta("net_target_pos", neutral.global_position)
 				NetworkLogger.info("Client: Spawned shared tree %d at (%.0f, %.0f)" % [net_id, pos_x, pos_y], "CoopAnything")
 
 puppet func rpc_sync_enemy_batch(batch: Array) -> void:
@@ -641,10 +648,9 @@ puppet func rpc_sync_enemy_batch(batch: Array) -> void:
 				if is_instance_valid(enemy) and not enemy.dead:
 					var target_pos = Vector2(item[1], item[2])
 					var dist = enemy.global_position.distance_to(target_pos)
-					if dist > 80.0:
+					if dist > 250.0:
 						enemy.global_position = target_pos
-					else:
-						enemy.global_position = enemy.global_position.linear_interpolate(target_pos, 0.45)
+					enemy.set_meta("net_target_pos", target_pos)
 					enemy.current_stats.health = item[3]
 					if item[3] <= 0:
 						enemy.set_meta("host_killed", true)

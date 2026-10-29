@@ -109,6 +109,23 @@
   - `real_game_arena_test.py`: 8/8 майлстоунов PASS, 0 ошибок.
   - `real_game_death_test.py`: 9/9 майлстоунов PASS, 0 ошибок.
 
+### 2.8. Устранение рассинхронизации позиций (Rubberbanding), интерполяция 60 FPS и защита фаз волны
+- **Устранение Rubberbanding (рывки при задержке сети):**
+  - В `network_manager.gd::rpc_send_player_input`: на Хосте увеличен порог коррекции физического ввода с `80.0` до `150.0 / 300.0`. Хост полностью доверяет своей авторитетной физической симуляции ввода, не стягивая марионетку игрока к устаревшим координатам Клиента.
+  - В `network_manager.gd::rpc_sync_player_positions`: для локального игрока Клиента (`my_player_index`) порог коррекции поднят с `60.0` до `180.0 / 350.0`. При штатном пинге локальное предсказание не дергает персонажа назад, коррекция наступает только при реальном расхождении.
+- **Плавная покадровая 60 FPS интерполяция для удаленных сущностей:**
+  - В `network_manager.gd`: пакеты позиций мобов и игроков (`rpc_sync_enemy_batch`, `rpc_sync_player_positions`) теперь сохраняют целевую точку `net_target_pos` у сущностей и делают жесткий телепорт только при скачке `dist > 250.0`.
+  - В `extensions/main.gd`: в `_physics_process(delta)` на Клиенте каждый физический кадр (60 раз в секунду) выполняется `linear_interpolate(target, clamp(delta * 16.0, 0.0, 1.0))` для удаленного игрока, сетевых врагов и деревьев, устраняя дискретность 20 Hz пакетов.
+- **Защита межволнового перехода (`_cleaning_up`):**
+  - В `extensions/main.gd`: добавлена проверка `_cleaning_up` в `_network_register_enemy`, `_network_register_neutral`, `_on_EntitySpawner_enemy_spawned`, `_on_EntitySpawner_neutral_spawned`, `spawn_gold` и `spawn_consumables`. Исключены паразитные регистрации и спавны во время очистки комнаты.
+  - При смерти мобов во время очистки (`_cleaning_up = true`) Хост не шлет индивидуальные `rpc_enemy_died`, так как обе стороны очищают списки централизованно.
+  - На Клиенте в `_physics_process` очищается очередь `queue_to_spawn_trees`.
+  - В `network_manager.gd::rpc_sync_change_scene`: добавлена очистка словарей `network_enemies.clear()` и `ground_items.clear()` при смене сцен.
+- **Результаты верификации (2 реальных процесса):**
+  - `real_game_arena_test.py`: 8/8 майлстоунов PASS, 0 ошибок.
+  - `real_game_postwave_test.py`: 7/7 майлстоунов PASS, 0 ошибок.
+  - `real_game_death_test.py`: 9/9 майлстоунов PASS, 0 ошибок.
+
 ---
 
 ## 3. Статус автоматических тестов (Real Game Testing)

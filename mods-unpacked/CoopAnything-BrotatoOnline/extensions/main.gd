@@ -57,8 +57,27 @@ func _physics_process(delta: float) -> void:
 			if p_batch.size() > 0:
 				net.rpc_unreliable("rpc_sync_player_positions", p_batch)
 	elif net and net.is_online() and net.is_client():
-		if _entity_spawner and "queue_to_spawn_summons" in _entity_spawner and _entity_spawner.queue_to_spawn_summons.size() > 0:
-			_entity_spawner.queue_to_spawn_summons.clear()
+		if _entity_spawner:
+			if "queue_to_spawn_summons" in _entity_spawner and _entity_spawner.queue_to_spawn_summons.size() > 0:
+				_entity_spawner.queue_to_spawn_summons.clear()
+			if "queue_to_spawn_trees" in _entity_spawner and _entity_spawner.queue_to_spawn_trees.size() > 0:
+				_entity_spawner.queue_to_spawn_trees.clear()
+
+		# Smooth 60 FPS interpolation for remote players
+		var weight = clamp(delta * 16.0, 0.0, 1.0)
+		for i in range(_players.size()):
+			if i != net.my_player_index:
+				var p = _players[i]
+				if is_instance_valid(p) and not p.dead and p.has_meta("net_target_pos"):
+					var target = p.get_meta("net_target_pos")
+					p.global_position = p.global_position.linear_interpolate(target, weight)
+		
+		# Smooth 60 FPS interpolation for shared enemies and trees
+		for net_id in net.network_enemies.keys():
+			var entity = net.network_enemies[net_id]
+			if is_instance_valid(entity) and not entity.dead and entity.has_meta("net_target_pos"):
+				var target = entity.get_meta("net_target_pos")
+				entity.global_position = entity.global_position.linear_interpolate(target, weight)
 
 func _on_player_died(p_player: Player, args: Entity.DieArgs) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
@@ -70,12 +89,14 @@ func _on_player_died(p_player: Player, args: Entity.DieArgs) -> void:
 
 func _on_EntitySpawner_enemy_spawned(enemy: Enemy) -> void:
 	._on_EntitySpawner_enemy_spawned(enemy)
+	if _cleaning_up:
+		return
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online() and net.is_host():
 		call_deferred("_network_register_enemy", enemy)
 
 func _network_register_enemy(enemy: Enemy) -> void:
-	if not is_instance_valid(enemy) or enemy.dead:
+	if _cleaning_up or not is_instance_valid(enemy) or enemy.dead:
 		return
 	var net = get_node_or_null("/root/NetworkManager")
 	if not net or not net.is_online() or not net.is_host():
@@ -93,12 +114,14 @@ func _network_register_enemy(enemy: Enemy) -> void:
 
 func _on_EntitySpawner_neutral_spawned(neutral: Neutral) -> void:
 	._on_EntitySpawner_neutral_spawned(neutral)
+	if _cleaning_up:
+		return
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online() and net.is_host():
 		call_deferred("_network_register_neutral", neutral)
 
 func _network_register_neutral(neutral: Neutral) -> void:
-	if not is_instance_valid(neutral) or neutral.dead:
+	if _cleaning_up or not is_instance_valid(neutral) or neutral.dead:
 		return
 	var net = get_node_or_null("/root/NetworkManager")
 	if not net or not net.is_online() or not net.is_host():
@@ -121,7 +144,8 @@ func _on_enemy_died(enemy: Enemy, args: Entity.DieArgs) -> void:
 			if enemy.has_meta("net_id"):
 				var net_id = enemy.get_meta("net_id")
 				net.network_enemies.erase(net_id)
-				net.rpc("rpc_enemy_died", net_id)
+				if not _cleaning_up:
+					net.rpc("rpc_enemy_died", net_id)
 	._on_enemy_died(enemy, args)
 
 func _on_neutral_died(neutral: Neutral, args: Entity.DieArgs) -> void:
@@ -136,7 +160,8 @@ func _on_neutral_died(neutral: Neutral, args: Entity.DieArgs) -> void:
 			if neutral.has_meta("net_id"):
 				var net_id = neutral.get_meta("net_id")
 				net.network_enemies.erase(net_id)
-				net.rpc("rpc_enemy_died", net_id)
+				if not _cleaning_up:
+					net.rpc("rpc_enemy_died", net_id)
 	._on_neutral_died(neutral, args)
 
 func _on_enemy_took_damage(
@@ -181,7 +206,7 @@ func _sync_currencies() -> void:
 func spawn_gold(value: float, pos: Vector2, spread: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online():
-		if net.is_client():
+		if _cleaning_up or net.is_client():
 			return
 		elif net.is_host():
 			var value_floored: = int(value)
@@ -236,7 +261,7 @@ func spawn_gold(value: float, pos: Vector2, spread: int) -> void:
 func spawn_consumables(unit: Unit) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online():
-		if net.is_client():
+		if _cleaning_up or net.is_client():
 			return
 		elif net.is_host():
 			var luck: = 0.0
