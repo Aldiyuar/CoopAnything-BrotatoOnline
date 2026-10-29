@@ -58,6 +58,10 @@ func _physics_process(delta: float) -> void:
 				net.rpc_unreliable("rpc_sync_player_positions", p_batch)
 	elif net and net.is_online() and net.is_client():
 		if _entity_spawner:
+			if "queue_to_spawn" in _entity_spawner and _entity_spawner.queue_to_spawn.size() > 0:
+				_entity_spawner.queue_to_spawn.clear()
+			if "queue_to_spawn_bosses" in _entity_spawner and _entity_spawner.queue_to_spawn_bosses.size() > 0:
+				_entity_spawner.queue_to_spawn_bosses.clear()
 			if "queue_to_spawn_summons" in _entity_spawner and _entity_spawner.queue_to_spawn_summons.size() > 0:
 				_entity_spawner.queue_to_spawn_summons.clear()
 			if "queue_to_spawn_trees" in _entity_spawner and _entity_spawner.queue_to_spawn_trees.size() > 0:
@@ -230,6 +234,15 @@ func spawn_gold(value: float, pos: Vector2, spread: int) -> void:
 					_error = gold.connect("picked_up", _effects_manager, "on_gold_picked_up")
 					_error = gold.connect("picked_up", _floating_text_manager, "on_gold_picked_up")
 					yield(gold, "ready")
+					if _cleaning_up or not is_instance_valid(self) or not is_instance_valid(gold):
+						if is_instance_valid(gold):
+							gold.already_picked_up = true
+							add_node_to_pool(gold, _gold_pool_id)
+						return
+
+				gold.value = Gold.INITIAL_VALUE
+				gold.boosted = 0
+				gold.scale = Vector2.ONE
 
 				if RunData.bonus_gold > 0:
 					var gold_value = gold.value
@@ -288,6 +301,11 @@ func spawn_consumables(unit: Unit) -> void:
 					_consumables_container.call_deferred("add_child", consumable)
 					var _error = consumable.connect("picked_up", self, "on_consumable_picked_up")
 					yield(consumable, "ready")
+					if _cleaning_up or not is_instance_valid(self) or not is_instance_valid(consumable):
+						if is_instance_valid(consumable):
+							consumable.already_picked_up = true
+							add_node_to_pool(consumable, _consumable_pool_id)
+						return
 
 				consumable.already_picked_up = false
 				consumable.consumable_data = consumable_to_spawn
@@ -313,7 +331,10 @@ func on_gold_picked_up(gold: Node, player_index: int) -> void:
 	if net and net.is_online():
 		if gold.already_picked_up:
 			return
+		if net.is_client() and player_index != net.my_player_index:
+			return
 		gold.already_picked_up = true
+		gold.set_meta("net_item_id", -1)
 		_active_golds.erase(gold)
 		add_node_to_pool(gold, _gold_pool_id)
 		
@@ -347,7 +368,10 @@ func on_consumable_picked_up(consumable: Node, player_index: int) -> void:
 	if net and net.is_online():
 		if consumable.already_picked_up:
 			return
+		if net.is_client() and player_index != net.my_player_index:
+			return
 		consumable.already_picked_up = true
+		consumable.set_meta("net_item_id", -1)
 		_consumables.erase(consumable)
 		add_node_to_pool(consumable, _consumable_pool_id)
 		

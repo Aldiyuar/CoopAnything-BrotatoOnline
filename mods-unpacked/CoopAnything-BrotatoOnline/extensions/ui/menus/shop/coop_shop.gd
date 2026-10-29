@@ -2,6 +2,8 @@ extends "res://ui/menus/shop/coop_shop.gd"
 
 const NetworkLogger = preload("res://mods-unpacked/CoopAnything-BrotatoOnline/global/network_logger.gd")
 
+var _reroll_pending: bool = false
+
 func _enter_tree() -> void:
 	NetworkLogger.info("CoopShop: _enter_tree called (players in RunData: %d)" % RunData.get_player_count(), "CoopAnything")
 
@@ -73,7 +75,7 @@ func _on_RerollButton_pressed(player_index: int) -> void:
 		return
 	
 	if net.is_client():
-		if player_index == net.my_player_index:
+		if player_index == net.my_player_index and not _reroll_pending:
 			_on_client_reroll_pressed()
 		return
 	
@@ -87,6 +89,20 @@ func _on_RerollButton_pressed(player_index: int) -> void:
 	if RunData.has_method("get_player_locked_shop_items"):
 		locked_count = RunData.get_player_locked_shop_items(player_index).size()
 	net.rpc("rpc_confirm_shop_reroll", player_index, gold_after, serialized_items, locked_count)
+
+func on_shop_item_bought(shop_item, player_index: int) -> void:
+	.on_shop_item_bought(shop_item, player_index)
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online() and net.is_host():
+		var gold_after = RunData.get_player_gold(player_index)
+		var item_res_path = net.get_resource_path(shop_item.item_data) if net.has_method("get_resource_path") else ""
+		var slot_idx = 0
+		var cont = _get_shop_items_container(player_index)
+		if cont and "_shop_items" in cont:
+			var idx = cont._shop_items.find(shop_item)
+			if idx != -1:
+				slot_idx = idx
+		net.rpc("rpc_confirm_shop_buy", player_index, slot_idx, gold_after, item_res_path)
 
 func advance_to_next_wave(next_wave: int = -1) -> void:
 	NetworkLogger.success("CoopShop: Advancing to next wave...", "CoopAnything")
@@ -153,11 +169,7 @@ func _setup_coop_shop_network() -> void:
 	var target_player = net.my_player_index
 	var container = _get_coop_player_container(target_player) if target_player < CoopService.UI_MAX_PLAYER_COUNT else null
 	if container:
-		# Hook RerollButton for local player
-		var reroll_btn = _get_reroll_button(target_player)
-		if reroll_btn and not reroll_btn.is_connected("pressed", self, "_on_client_reroll_pressed"):
-			reroll_btn.connect("pressed", self, "_on_client_reroll_pressed")
-			
+		# Note: RerollButton is handled natively via overridden _on_RerollButton_pressed
 		# Hook BuyButtons on the ShopItems for local player
 		var items_container = _get_shop_items_container(target_player)
 		if items_container:
@@ -179,5 +191,6 @@ func _on_client_buy_pressed(slot_idx: int) -> void:
 func _on_client_reroll_pressed() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
+		_reroll_pending = true
 		NetworkLogger.info("Client: Shop REROLL clicked for player %d, sending RPC to host..." % net.my_player_index, "CoopAnything")
 		net.rpc_id(1, "rpc_request_shop_reroll", net.my_player_index)

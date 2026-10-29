@@ -287,6 +287,56 @@ func _on_peer_connected(peer_id: int) -> void:
 			# Server full, disconnect peer
 			_enet_peer.disconnect_peer(peer_id)
 
+func is_player_slot_active(p: int) -> bool:
+	if p == 0:
+		return true
+	return peer_to_player_index.values().has(p)
+
+func _handle_disconnected_player(idx: int) -> void:
+	var scene = get_tree().current_scene
+	if not scene:
+		return
+	if "_players" in scene and idx < scene._players.size():
+		var p = scene._players[idx]
+		if is_instance_valid(p) and not p.dead:
+			p.current_stats.health = 0
+			p.die()
+			NetworkLogger.warn("Host: Disconnected player %d marked dead to unblock arena" % idx, "CoopAnything")
+	var up_ui = _find_upgrades_ui(scene)
+	if up_ui:
+		if "_consumables_to_process" in up_ui and idx < up_ui._consumables_to_process.size():
+			up_ui._consumables_to_process[idx].clear()
+		if "_upgrades_to_process" in up_ui and idx < up_ui._upgrades_to_process.size():
+			up_ui._upgrades_to_process[idx].clear()
+		if "_extra_items_to_process" in up_ui and idx < up_ui._extra_items_to_process.size():
+			up_ui._extra_items_to_process[idx].clear()
+		if "_player_is_choosing" in up_ui and idx < up_ui._player_is_choosing.size():
+			up_ui._player_is_choosing[idx] = false
+		var cont = up_ui._get_player_container(idx) if up_ui.has_method("_get_player_container") else null
+		if cont and cont.has_method("finish"):
+			cont.finish()
+	_check_and_advance_shop_if_ready()
+
+func _check_and_advance_shop_if_ready() -> void:
+	if not is_host():
+		return
+	var shop = get_tree().current_scene
+	if not shop or not (shop.name == "CoopShop" or shop.has_method("advance_to_next_wave")):
+		return
+	var all_ready: bool = true
+	for p in range(RunData.get_player_count()):
+		if is_player_slot_active(p) and not shop_ready_states.get(p, false):
+			all_ready = false
+			break
+	if all_ready and shop_ready_states.get(0, false):
+		NetworkLogger.success("Host: Remaining players READY in shop, advancing to next wave...", "CoopAnything")
+		var next_wave = RunData.current_wave + 1
+		for p in RunData.get_player_count():
+			var effects = RunData.get_player_effects(p)
+			if effects.has(Keys.item_hourglass_hash) and effects[Keys.item_hourglass_hash] > 0:
+				next_wave -= effects[Keys.item_hourglass_hash]
+		rpc("rpc_all_ready_advance_wave", next_wave)
+
 func _on_peer_disconnected(peer_id: int) -> void:
 	NetworkLogger.info("Peer disconnected: %d" % peer_id, "CoopAnything")
 	if peer_to_player_index.has(peer_id):
@@ -296,6 +346,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		shop_ready_states.erase(idx)
 		_unregister_network_player_in_coop_service(idx)
 		emit_signal("peer_left", peer_id, idx)
+		if is_host():
+			_handle_disconnected_player(idx)
 
 func _on_connected_to_server() -> void:
 	NetworkLogger.success("[QA_TEST] Client: Successfully connected to host server!", "CoopAnything")
@@ -306,8 +358,11 @@ func _on_connection_failed() -> void:
 	close_session()
 
 func _on_server_disconnected() -> void:
-	NetworkLogger.warn("[QA_TEST] Host disconnected.", "CoopAnything")
+	NetworkLogger.warn("[QA_TEST] Host disconnected. Returning to title...", "CoopAnything")
 	close_session()
+	var menu_data = get_node_or_null("/root/MenuData")
+	var title_scene = menu_data.title_screen_scene if (menu_data and menu_data.get("title_screen_scene")) else "res://ui/menus/pages/main_menu.tscn"
+	var _err = get_tree().change_scene(title_scene)
 
 # ----------------------------------------------------
 # Native CoopService Bridge
@@ -609,9 +664,11 @@ puppet func rpc_receive_wave_snapshot(snapshot: Dictionary) -> void:
 # ----------------------------------------------------
 remotesync func rpc_spawn_network_enemy(net_id: int, scene_path: String, pos_x: float, pos_y: float, hp: int) -> void:
 	if is_client():
-		var scene = load(scene_path)
 		var main_scene = get_tree().current_scene
-		if scene and main_scene and main_scene.has_node("EntitySpawner"):
+		if not main_scene or main_scene.get("_cleaning_up") == true or not main_scene.has_node("EntitySpawner"):
+			return
+		var scene = load(scene_path)
+		if scene:
 			var spawner = main_scene.get_node("EntitySpawner")
 			var args = EntitySpawner.SpawnEntityArgs.new(Vector2(pos_x, pos_y), EntityType.ENEMY)
 			var enemy = spawner.spawn_entity(scene, args)
@@ -626,9 +683,11 @@ remotesync func rpc_spawn_network_enemy(net_id: int, scene_path: String, pos_x: 
 
 remotesync func rpc_spawn_network_neutral(net_id: int, scene_path: String, pos_x: float, pos_y: float) -> void:
 	if is_client():
-		var scene = load(scene_path)
 		var main_scene = get_tree().current_scene
-		if scene and main_scene and main_scene.has_node("EntitySpawner"):
+		if not main_scene or main_scene.get("_cleaning_up") == true or not main_scene.has_node("EntitySpawner"):
+			return
+		var scene = load(scene_path)
+		if scene:
 			var spawner = main_scene.get_node("EntitySpawner")
 			var args = EntitySpawner.SpawnEntityArgs.new(Vector2(pos_x, pos_y), EntityType.NEUTRAL)
 			var neutral = spawner.spawn_entity(scene, args)
@@ -693,67 +752,76 @@ remotesync func rpc_sync_all_players_gold_and_xp(golds: Array, xps: Array) -> vo
 remotesync func rpc_spawn_ground_gold(item_id: int, gold_val: int, start_x: float, start_y: float, dest_x: float, dest_y: float) -> void:
 	if is_client():
 		var main_scene = get_tree().current_scene
-		if main_scene and ("_materials_container" in main_scene):
-			var gold = main_scene.get_node_from_pool(main_scene._gold_pool_id, main_scene._materials_container)
-			var is_new_instance: bool = false
-			if gold == null:
-				is_new_instance = true
-				gold = main_scene.gold_scene.instance()
-			gold.already_picked_up = false
-			gold.set_meta("net_item_id", item_id)
-			ground_items[item_id] = gold
-			if is_new_instance:
-				main_scene._materials_container.call_deferred("add_child", gold)
-				var _error = gold.connect("picked_up", main_scene, "on_gold_picked_up")
-				_error = gold.connect("picked_up", main_scene._effects_manager, "on_gold_picked_up")
-				_error = gold.connect("picked_up", main_scene._floating_text_manager, "on_gold_picked_up")
-				yield(gold, "ready")
-				if not ground_items.has(item_id) or not is_instance_valid(main_scene):
-					if is_instance_valid(gold) and is_instance_valid(main_scene):
-						gold.already_picked_up = true
-						main_scene.add_node_to_pool(gold, main_scene._gold_pool_id)
-					return
-			gold.value = gold_val
-			gold.set_texture(main_scene.gold_sprites.pick_random())
-			var start_pos = Vector2(start_x, start_y)
-			var dest_pos = Vector2(dest_x, dest_y)
-			gold.drop(start_pos, 0.0, dest_pos)
-			main_scene._active_golds.push_back(gold)
-			emit_signal("gold_spawned")
+		if not main_scene or main_scene.get("_cleaning_up") == true or not ("_materials_container" in main_scene):
+			return
+		var gold = main_scene.get_node_from_pool(main_scene._gold_pool_id, main_scene._materials_container)
+		var is_new_instance: bool = false
+		if gold == null:
+			is_new_instance = true
+			gold = main_scene.gold_scene.instance()
+		gold.already_picked_up = false
+		gold.scale = Vector2.ONE
+		gold.boosted = 0
+		gold.value = gold_val
+		gold.set_meta("net_item_id", item_id)
+		ground_items[item_id] = gold
+		if is_new_instance:
+			main_scene._materials_container.call_deferred("add_child", gold)
+			var _error = gold.connect("picked_up", main_scene, "on_gold_picked_up")
+			_error = gold.connect("picked_up", main_scene._effects_manager, "on_gold_picked_up")
+			_error = gold.connect("picked_up", main_scene._floating_text_manager, "on_gold_picked_up")
+			yield(gold, "ready")
+			if not is_instance_valid(main_scene) or main_scene.get("_cleaning_up") == true or not ground_items.has(item_id):
+				if is_instance_valid(gold) and is_instance_valid(main_scene):
+					gold.already_picked_up = true
+					gold.set_meta("net_item_id", -1)
+					main_scene.add_node_to_pool(gold, main_scene._gold_pool_id)
+				ground_items.erase(item_id)
+				return
+		gold.value = gold_val
+		gold.set_texture(main_scene.gold_sprites.pick_random())
+		var start_pos = Vector2(start_x, start_y)
+		var dest_pos = Vector2(dest_x, dest_y)
+		gold.drop(start_pos, 0.0, dest_pos)
+		main_scene._active_golds.push_back(gold)
+		emit_signal("gold_spawned")
 
 remotesync func rpc_spawn_ground_consumable(item_id: int, res_path: String, start_x: float, start_y: float, dest_x: float, dest_y: float) -> void:
 	if is_client():
 		if res_path == "" or res_path == "res://":
 			return
 		var main_scene = get_tree().current_scene
-		if main_scene and ("_consumables_container" in main_scene):
-			var data = load(res_path)
-			if not data:
+		if not main_scene or main_scene.get("_cleaning_up") == true or not ("_consumables_container" in main_scene):
+			return
+		var data = load(res_path)
+		if not data:
+			return
+		var consumable = main_scene.get_node_from_pool(main_scene._consumable_pool_id, main_scene._consumables_container)
+		var is_new_instance: bool = false
+		if consumable == null:
+			is_new_instance = true
+			consumable = main_scene.consumable_scene.instance()
+		consumable.already_picked_up = false
+		consumable.consumable_data = data
+		consumable.set_texture(data.icon)
+		consumable.set_meta("net_item_id", item_id)
+		ground_items[item_id] = consumable
+		if is_new_instance:
+			main_scene._consumables_container.call_deferred("add_child", consumable)
+			var _error = consumable.connect("picked_up", main_scene, "on_consumable_picked_up")
+			yield(consumable, "ready")
+			if not is_instance_valid(main_scene) or main_scene.get("_cleaning_up") == true or not ground_items.has(item_id):
+				if is_instance_valid(consumable) and is_instance_valid(main_scene):
+					consumable.already_picked_up = true
+					consumable.set_meta("net_item_id", -1)
+					main_scene.add_node_to_pool(consumable, main_scene._consumable_pool_id)
+				ground_items.erase(item_id)
 				return
-			var consumable = main_scene.get_node_from_pool(main_scene._consumable_pool_id, main_scene._consumables_container)
-			var is_new_instance: bool = false
-			if consumable == null:
-				is_new_instance = true
-				consumable = main_scene.consumable_scene.instance()
-			consumable.already_picked_up = false
-			consumable.consumable_data = data
-			consumable.set_texture(data.icon)
-			consumable.set_meta("net_item_id", item_id)
-			ground_items[item_id] = consumable
-			if is_new_instance:
-				main_scene._consumables_container.call_deferred("add_child", consumable)
-				var _error = consumable.connect("picked_up", main_scene, "on_consumable_picked_up")
-				yield(consumable, "ready")
-				if not ground_items.has(item_id) or not is_instance_valid(main_scene):
-					if is_instance_valid(consumable) and is_instance_valid(main_scene):
-						consumable.already_picked_up = true
-						main_scene.add_node_to_pool(consumable, main_scene._consumable_pool_id)
-					return
-			var start_pos = Vector2(start_x, start_y)
-			var dest_pos = Vector2(dest_x, dest_y)
-			consumable.drop(start_pos, 0.0, dest_pos)
-			main_scene._consumables.push_back(consumable)
-			NetworkLogger.info("Client: Spawned ground consumable %d (%s) at (%.0f, %.0f)" % [item_id, res_path.get_file(), dest_x, dest_y], "CoopAnything")
+		var start_pos = Vector2(start_x, start_y)
+		var dest_pos = Vector2(dest_x, dest_y)
+		consumable.drop(start_pos, 0.0, dest_pos)
+		main_scene._consumables.push_back(consumable)
+		NetworkLogger.info("Client: Spawned ground consumable %d (%s) at (%.0f, %.0f)" % [item_id, res_path.get_file(), dest_x, dest_y], "CoopAnything")
 
 remote func rpc_request_item_pickup(item_id: int, is_gold: bool, player_index: int) -> void:
 	if not is_host():
@@ -1067,19 +1135,27 @@ func _populate_test_upgrades_and_crates() -> void:
 # ----------------------------------------------------
 # Shop Network RPCs
 # ----------------------------------------------------
+func get_resource_path(res: Resource) -> String:
+	if not res:
+		return ""
+	var path: String = res.resource_path
+	if path != "" and path != "res://":
+		return path
+	if res.get("my_id"):
+		var item_service = get_node_or_null("/root/ItemService")
+		if item_service:
+			var found = item_service.get_element(item_service.items, res.my_id)
+			if not found:
+				found = item_service.get_element(item_service.weapons, res.my_id)
+			if found and found.resource_path != "":
+				return found.resource_path
+	return ""
+
 func _serialize_shop_items(shop_items_array: Array) -> Array:
 	var result: Array = []
 	for entry in shop_items_array:
 		if entry is Array and entry.size() > 0 and entry[0] != null:
-			var res_path: String = entry[0].resource_path
-			if res_path == "" and entry[0].get("my_id"):
-				var item_service = get_node_or_null("/root/ItemService")
-				if item_service:
-					var found = item_service.get_element(item_service.items, entry[0].my_id)
-					if not found:
-						found = item_service.get_element(item_service.weapons, entry[0].my_id)
-					if found:
-						res_path = found.resource_path
+			var res_path: String = get_resource_path(entry[0])
 			var second_val = entry[1] if entry.size() > 1 else false
 			result.append([res_path, second_val])
 	return result
@@ -1124,28 +1200,38 @@ remote func rpc_request_shop_buy(player_index: int, slot_idx: int) -> void:
 				
 				if item and item.has_method("_on_BuyButton_pressed"):
 					var gold_before = RunData.get_player_gold(player_index)
+					var item_res_path = get_resource_path(item.item_data) if (item.get("item_data") != null) else ""
 					item._on_BuyButton_pressed()
 					var gold_after = RunData.get_player_gold(player_index)
 					NetworkLogger.success("Host: Executed BUY for player %d on slot %d (Gold: %d -> %d)" % [player_index, slot_idx, gold_before, gold_after], "CoopAnything")
-					rpc("rpc_confirm_shop_buy", player_index, slot_idx, gold_after)
+					rpc("rpc_confirm_shop_buy", player_index, slot_idx, gold_after, item_res_path)
 
-remotesync func rpc_confirm_shop_buy(player_index: int, slot_idx: int, updated_gold: int) -> void:
+remotesync func rpc_confirm_shop_buy(player_index: int, slot_idx: int, updated_gold: int, item_res_path: String = "") -> void:
 	NetworkLogger.info("Confirmed shop buy for player %d (slot %d, remaining gold: %d)" % [player_index, slot_idx, updated_gold], "CoopAnything")
 	if RunData and RunData.players_data.size() > player_index:
 		RunData.players_data[player_index].gold = updated_gold
-	var shop = get_tree().current_scene
-	if shop:
-		var container = shop.get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer" + str(player_index + 1))
-		if container:
-			var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
-			if items_vbox:
-				var item = null
-				if items_vbox.has_method("get_shop_item_node"):
-					item = items_vbox.get_shop_item_node(slot_idx)
-				elif slot_idx < items_vbox.get_child_count():
-					item = items_vbox.get_child(slot_idx)
-				if item and item.has_method("deactivate"):
-					item.deactivate()
+		RunData.emit_signal("gold_changed", updated_gold, player_index)
+	if is_client():
+		if player_index != my_player_index and item_res_path != "" and item_res_path != "res://":
+			var data = load(item_res_path)
+			if data and RunData:
+				if data is WeaponData:
+					RunData.add_weapon(data, player_index)
+				else:
+					RunData.add_item(data, player_index)
+		var shop = get_tree().current_scene
+		if shop:
+			var container = shop.get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer" + str(player_index + 1))
+			if container:
+				var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
+				if items_vbox:
+					var item = null
+					if items_vbox.has_method("get_shop_item_node"):
+						item = items_vbox.get_shop_item_node(slot_idx)
+					elif slot_idx < items_vbox.get_child_count():
+						item = items_vbox.get_child(slot_idx)
+					if item and item.has_method("deactivate"):
+						item.deactivate()
 	call_deferred("capture_screen", "08_shop_after_client_buy")
 
 remote func rpc_request_shop_reroll(player_index: int) -> void:
@@ -1165,9 +1251,11 @@ remotesync func rpc_confirm_shop_reroll(player_index: int, updated_gold: int, se
 	if RunData and RunData.players_data.size() > player_index:
 		RunData.players_data[player_index].gold = updated_gold
 		RunData.emit_signal("gold_changed", updated_gold, player_index)
-	if is_client() and serialized_items.size() > 0:
+	if is_client():
 		var shop = get_tree().current_scene
-		if shop and ("_shop_items" in shop) and player_index < shop._shop_items.size():
+		if shop and ("_reroll_pending" in shop):
+			shop._reroll_pending = false
+		if serialized_items.size() > 0 and shop and ("_shop_items" in shop) and player_index < shop._shop_items.size():
 			shop._shop_items[player_index] = _deserialize_shop_items(serialized_items)
 			var cont = shop._get_shop_items_container(player_index) if shop.has_method("_get_shop_items_container") else null
 			if cont and cont.has_method("set_shop_items"):
@@ -1207,15 +1295,18 @@ remotesync func rpc_confirm_upgrade(player_index: int, slot_idx: int) -> void:
 	var scene = get_tree().current_scene
 	var upgrades_ui = _find_upgrades_ui(scene)
 	if upgrades_ui and is_client() and player_index == my_player_index:
-		var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
-		if container and container.has_method("_get_upgrade_uis"):
-			var cards = container._get_upgrade_uis()
-			if slot_idx < cards.size() and cards[slot_idx].has_method("_on_ChooseButton_pressed"):
-				cards[slot_idx]._on_ChooseButton_pressed()
+		if upgrades_ui.get("_upgrade_choice_pending") == true:
+			upgrades_ui._upgrade_choice_pending = false
+		else:
+			var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+			if not container:
+				container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+			if not container:
+				container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+			if container and container.has_method("_get_upgrade_uis"):
+				var cards = container._get_upgrade_uis()
+				if slot_idx < cards.size() and cards[slot_idx].has_method("_on_ChooseButton_pressed"):
+					cards[slot_idx]._on_ChooseButton_pressed()
 	call_deferred("capture_screen", "13_upgrade_chosen")
 
 remote func rpc_request_crate_take(player_index: int) -> void:
@@ -1241,13 +1332,16 @@ remotesync func rpc_confirm_crate_take(player_index: int) -> void:
 	var scene = get_tree().current_scene
 	var upgrades_ui = _find_upgrades_ui(scene)
 	if upgrades_ui and is_client() and player_index == my_player_index:
-		var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
-		if container and container.has_method("_on_TakeButton_pressed"):
-			container._on_TakeButton_pressed()
+		if upgrades_ui.get("_crate_choice_pending") == true:
+			upgrades_ui._crate_choice_pending = false
+		else:
+			var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+			if not container:
+				container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+			if not container:
+				container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+			if container and container.has_method("_on_TakeButton_pressed"):
+				container._on_TakeButton_pressed()
 	call_deferred("capture_screen", "11_crate_item_taken")
 
 remote func rpc_request_crate_discard(player_index: int) -> void:
@@ -1297,7 +1391,7 @@ remotesync func rpc_notify_shop_ready(player_index: int, is_ready: bool) -> void
 	if is_host():
 		var all_ready: bool = true
 		for p in range(RunData.get_player_count()):
-			if not shop_ready_states.get(p, false):
+			if is_player_slot_active(p) and not shop_ready_states.get(p, false):
 				all_ready = false
 				break
 		if all_ready:

@@ -1,11 +1,11 @@
-# Graph Report - Brotato + Online Coop Mod  (2026-10-29)
+# Graph Report - Brotato + Online Coop Mod  (2026-10-30)
 
 ## Corpus Check
 - 493 files · ~250,000 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4534 nodes · 4837 edges · 324 communities (109 shown, 215 thin omitted)
+- 4539 nodes · 4842 edges · 322 communities (108 shown, 214 thin omitted)
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 389 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
@@ -42,6 +42,7 @@
 - class BaseSelection
 - class BugReporterInput
 - class WeaponStats
+- class SortInventoryButton
 - class BuilderTurret
 - Boss
 - class Shop
@@ -53,23 +54,22 @@
 - class MenuCodex
 - Node
 - Resource
+- PanelContainer
 - class MainMenu
 - class MenuProfile
 - Mod/main.gd
 - tools/build_full_graph.py
+- RunData
 - class ProgressDataLoaderBeta
 - class ProgressDataLoaderV3
 - Brotato/mod_loader.gd
-- OptionButton
 - class CatlingGun
-- PanelContainer
+- Effect
 - class ItemParentData
 - class BurningParticles
 - class RangedWeaponStats
-- class UpgradesUI
 - class UpgradesUIPlayerContainer
 - Node2D
-- class RailGunProjectile
 - class PopupManager
 - class Projectile
 - Brotato/challenge_service.gd
@@ -85,7 +85,7 @@
 - class CoopShopPlayerContainer
 - class IngameMenus
 - class InventoryContainer
-- Effect
+- ItemService
 - class EffectsManager
 - class Entity
 - class EpicPlatform
@@ -94,28 +94,26 @@
 - Brotato/generate_achievement_loc_file.gd
 - class BonkDog
 - class Carousel
+- PlayerProjectile
 - class Effect
 - class FloatingTextManager
 - class GOGPlatform
-- ProgressData
 - class IngameMainMenu
 - class SteamPlatform
-- RunData
+- CoopService
 - class PlayerExplosion
 - class StatContainer
 - class WeaponSelection
 - Enemy
 - Brotato/platform.gd
 - Brotato/ui_service.gd
+- Mod/coop_shop.gd
 - class AbstractPlatform
 - class Announcement
 - class FogViewport
 - class ItemDescription
 - class ItemEnemy
-- ItemService
 - Mod/mod_main.gd
-- Mod/coop_shop.gd
-- class BanButton
 - class CoopItemPopup
 - class CoopUpgradesUIPlayerContainer
 - class JSONSchema
@@ -124,9 +122,11 @@
 - class MeleeShootingData
 - class Ratzilla
 - class Scapegoat
+- class UpgradesUI
 - Brotato/zone_service.gd
 - class Boss
 - class DifficultySelection
+- ProgressData
 - VBoxContainer
 - class MeleeWeapon
 - class PlayerRunData
@@ -144,11 +144,11 @@
 - class MeleeWeaponShootingBehavior
 - Control
 - class ModData
-- class OnlineCoopDialog
 - class PercentDamageTakenEnemyEffectBehavior
 - class ProgressDataLoaderV2
 - class Structure
 - class UIConsumableToProcessList
+- ZoneService
 - class ColorOption
 - class CoopJoinProgress
 - class CoopShopHint
@@ -159,13 +159,13 @@
 - class ItemExplodingEffect
 - class Menus
 - class ModManifest
+- class OnlineCoopDialog
 - class PauseMenu
 - class PercentDamageEffect
 - class Pursuer
 - Brotato/skin_manager.gd
 - Brotato/coop_resume.gd
 - Mod/coop_service.gd
-- ZoneService
 - class BrotatoolsUtils
 - NullEffect
 - class ChanceStatDamageEffect
@@ -177,7 +177,6 @@
 - class DoubleKeyValueEffect
 - class FixedTimer
 - class GainStatForEveryStatEffect
-- CoopService
 - class Jellyshield
 - class ModConfig
 - class PlayerUIElements
@@ -215,12 +214,14 @@
 - Brotato/popin_manager.gd
 - Brotato/sound_manager_2d.gd
 - Brotato/temp_stats.gd
+- Brotato/coop_end_run.gd
+- Mod/upgrades_ui.gd
 - class _ModLoaderScriptExtension
 - class Buffer
 - class Corrupted_Buffer
+- class DoubleValueEffect
 - class EffectWithSubEffects
 - class EndRunPlayerContainer
-- class EnemyProjectileRotating
 - class IconPanel
 - class ModContainer
 - class ModLoaderLog
@@ -238,13 +239,13 @@
 - Brotato/crash_reporter.gd
 - Brotato/music_manager.gd
 - Brotato/text.gd
+- class BaseEndRun
 - class BurningEffect
 - class CharacterDifficultyInfo
 - class CopyNearbyEntitiesMovementBehavior
 - class DetectTargetMovementBehavior
 - class EffectLine
 - class ExplodingEffect
-- class ExtraEnemyEffect
 - class Flasher
 - class FollowTargetMovementBehavior
 - class GainStatEveryKilledEnemiesEffect
@@ -255,26 +256,24 @@
 - class ModLoaderSetupLog
 - class MyTileMap
 - class PatrolEdgesOfMapMovementBehavior
-- class PetEffect
 - class PlayerHealthStatEffect
-- class Popin
 - class SecondaryStatContainer
-- class SortInventoryButton
 - class TargetRandGoldPosBehavior
 - class UIThingsToProcessPlayerContainer
+- class UITimeline
 - class ZoneDifficultyInfo
-- Brotato/coop_join_panel.gd
 - Mod/main_menu.gd
+- class BuilderTurretEffect
 - class CharacterDescription
 - class DifficultyScore
 - class EnemyData
-- class FloatingTextManagerShop
 - class FollowRandPosAroundPlayerMovementBehavior
 - class Healer
 - class IconData
 - class ItemAppearanceData
 - class ItemServiceGetShopItemsArgs
 - class Looter
+- class ModInfoContainer
 - class MyTileMapLimits
 - class NullCharmEffect
 - class NullDoubleValueEffect
@@ -297,23 +296,22 @@
 - Brotato/pet_service.gd
 - Brotato/menu_options.gd
 - class ChallengeAndRewardUI
+- class CustomArg
 - class LiveStats
 - Brotato/options_current.gd
 - class RunOptionsPanel
 - class StatData
-- class ZoneUILocked
 - Brotato/lamprey.gd
 - Brotato/effect_behavior_service.gd
 - Brotato/sound_service.gd
 - Brotato/hit_effect.gd
 - Mod/player_movement_behavior.gd
-- class BackgroundData
 - class ConsumableDamageEffect
 - class ConsumableHealingEffect
 - class FocusEmulatorBaseData
 - Brotato/setup_utils.gd
 - class PatrollingEnemy
-- class ZoneData
+- class WaveUnitData
 - Brotato/sprite_following_weapon.gd
 - class ArgValue
 - class BurningType
@@ -361,7 +359,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (324 total, 215 thin omitted)
+## Communities (322 total, 214 thin omitted)
 
 ### Community 9 - "Mod/network_manager.gd"
 Cohesion: 0.04
@@ -423,81 +421,81 @@ Nodes (7): class Inventory, Brotato/inventory.gd, GridContainer, locked_icon.png
 Cohesion: 0.07
 Nodes (5): class BugReporterInput, class BugReporterResponse, Brotato/bug_reporter_input.gd, Brotato/bug_reporter_response.gd, CanvasItem
 
-### Community 32 - "class BuilderTurret"
+### Community 32 - "class SortInventoryButton"
+Cohesion: 0.07
+Nodes (15): class BackgroundButton, class ConstantProjectileButton, class LanguageButton, class OnLostFocusButton, class ScoreStoringButton, class SortInventoryButton, class ZoneSelectionButton, Brotato/background_button.gd (+7 more)
+
+### Community 33 - "class BuilderTurret"
 Cohesion: 0.07
 Nodes (9): class BuilderTurret, class FlameTurret, class Garden, class WanderingBot, Brotato/builder_turret.gd, Brotato/flame_turret.gd, Brotato/garden.gd, Brotato/wandering_bot.gd (+1 more)
 
-### Community 33 - "Boss"
+### Community 34 - "Boss"
 Cohesion: 0.07
 Nodes (12): class Monk, class Rhino, Brotato/colossus.gd, Brotato/croc.gd, Brotato/gargoyle.gd, Brotato/invoker.gd, Brotato/mantis.gd, Brotato/mom.gd (+4 more)
 
-### Community 37 - "Reference"
+### Community 38 - "Reference"
 Cohesion: 0.08
 Nodes (25): class _ModLoaderCache, class _ModLoaderCLI, class _ModLoaderDependency, class _ModLoaderFile, class _ModLoaderPath, class BoostArgs, class MobProjectileStats, class ModLoaderModManager (+17 more)
 
-### Community 38 - "class ButtonWithIcon"
+### Community 39 - "class ButtonWithIcon"
 Cohesion: 0.08
 Nodes (5): class ButtonWithIcon, class MyMenuButton, Brotato/my_menu_button.gd, Brotato/button_with_icon.gd, MyMenuButtonParent
 
-### Community 39 - "class CoopShop"
+### Community 40 - "class CoopShop"
 Cohesion: 0.08
 Nodes (3): class CoopShop, Brotato/coop_shop.gd, BaseShop
 
-### Community 40 - "class MenuCodex"
+### Community 41 - "class MenuCodex"
 Cohesion: 0.08
 Nodes (5): class MenuCodex, class PopupAnouncement, Brotato/menu_codex.gd, Brotato/popup_anouncement.gd, Popup
 
-### Community 41 - "Node"
+### Community 42 - "Node"
 Cohesion: 0.08
 Nodes (17): class _ModLoaderSteam, class ModLoaderDeprecated, class ModLoaderUtils, class NetworkConstants, class SceneEffectBehavior, class Sorter, Brotato/deprecated.gd, Brotato/mod_loader_utils.gd (+9 more)
 
-### Community 42 - "Resource"
+### Community 43 - "Resource"
 Cohesion: 0.08
-Nodes (19): class CustomArg, class EffectBehaviorData, class ModLoaderOptionsProfile, class ModUserProfile, class SkinData, class Stats, class WaveData, class WaveGroupData (+11 more)
+Nodes (19): class BackgroundData, class EffectBehaviorData, class ModLoaderOptionsProfile, class ModUserProfile, class SkinData, class Stats, class WaveData, class WaveGroupData (+11 more)
 
-### Community 43 - "class MainMenu"
+### Community 44 - "PanelContainer"
+Cohesion: 0.08
+Nodes (14): class ChallengeUI, class EliteInfoPanel, class Popin, class ZonePanel, class ZoneUILocked, Brotato/debug_menu.gd, Brotato/popin.gd, Brotato/tooltip.gd (+6 more)
+
+### Community 45 - "class MainMenu"
 Cohesion: 0.08
 Nodes (3): class MainMenu, Brotato/main_menu.gd, special_button_theme.tres
 
-### Community 45 - "Mod/main.gd"
+### Community 47 - "Mod/main.gd"
 Cohesion: 0.08
 Nodes (17): Mod/main.gd, _change_scene(), _on_enemy_died(), _on_EntitySpawner_enemy_spawned(), _on_EntitySpawner_neutral_spawned(), _on_game_lost_focus(), _on_neutral_died(), _on_player_died() (+9 more)
 
-### Community 46 - "tools/build_full_graph.py"
+### Community 48 - "tools/build_full_graph.py"
 Cohesion: 0.09
 Nodes (4): Brotato.exe, coop_all.log, godot.log, modloader.log
 
-### Community 50 - "OptionButton"
+### Community 49 - "RunData"
 Cohesion: 0.09
-Nodes (14): class BackgroundButton, class ConstantProjectileButton, class LanguageButton, class OnLostFocusButton, class ScoreStoringButton, class ZoneSelectionButton, Brotato/background_button.gd, Brotato/constant_projectile_button.gd (+6 more)
+Nodes (13): class BanButton, class BulletHell, class CoopButton, class EndlessButton, Brotato/linked_stats.gd, Brotato/coop_player_selector.gd, Brotato/ban_button.gd, Brotato/coop_button.gd (+5 more)
 
-### Community 52 - "PanelContainer"
+### Community 54 - "Effect"
 Cohesion: 0.09
-Nodes (13): class ChallengeUI, class CharacterInfoPanel, class EliteInfoPanel, class ModInfoContainer, class ZonePanel, Brotato/debug_menu.gd, Brotato/tooltip.gd, Brotato/challenge_ui.gd (+5 more)
+Nodes (9): class ExtraEnemyEffect, class NullEffect, class PetEffect, class WeaponCooldownEffect, Brotato/extra_enemy_effect.gd, Brotato/pet_effect.gd, Brotato/weapon_cooldown_effect.gd, Brotato/null_effect.gd (+1 more)
 
-### Community 53 - "class ItemParentData"
+### Community 55 - "class ItemParentData"
 Cohesion: 0.09
 Nodes (3): class ItemParentData, Brotato/item_parent_data.gd, harvesting_icon.png
 
-### Community 54 - "class BurningParticles"
+### Community 56 - "class BurningParticles"
 Cohesion: 0.10
 Nodes (7): class BurningParticles, class PooledParticles, class RunningSmoke, Brotato/burning_particles.gd, Brotato/pooled_particles.gd, Brotato/running_smoke.gd, CPUParticles2D
 
-### Community 55 - "class RangedWeaponStats"
+### Community 57 - "class RangedWeaponStats"
 Cohesion: 0.10
 Nodes (5): class MeleeWeaponStats, class RangedWeaponStats, Brotato/melee_weapon_stats.gd, Brotato/ranged_weapon_stats.gd, WeaponStats
 
-### Community 56 - "class UpgradesUI"
-Cohesion: 0.10
-Nodes (6): class UpgradesUI, Brotato/upgrades_ui.gd, Mod/upgrades_ui.gd, _ready(), _show_next_player_options(), upgrades_ui.gd
-
-### Community 58 - "Node2D"
+### Community 59 - "Node2D"
 Cohesion: 0.11
 Nodes (11): class Behavior, class BossState, class BulletsGenerator, class WeaponsContainer, Brotato/boss_state.gd, Brotato/landing_asset.gd, Brotato/weapons_container.gd, Brotato/behavior.gd (+3 more)
-
-### Community 59 - "class RailGunProjectile"
-Cohesion: 0.10
-Nodes (10): class DelayedPlayerProjectile, class FireballProjectile, class ParticleAcceleratorProjectile, class RailGunProjectile, Brotato/particle_accelerator_projectile.gd, Brotato/rail_gun_projectile.gd, Brotato/taser_projectile.gd, Brotato/delayed_player_projectile.gd (+2 more)
 
 ### Community 64 - "class AttackBehavior"
 Cohesion: 0.11
@@ -515,9 +513,9 @@ Nodes (3): class CharacterPanelUI, Brotato/character_panel_ui.gd, ItemPanelUI
 Cohesion: 0.11
 Nodes (5): class IngameMenus, class TitleScreenMenus, Brotato/ingame_menus.gd, Brotato/title_screen_menus.gd, Menus
 
-### Community 75 - "Effect"
+### Community 75 - "ItemService"
 Cohesion: 0.12
-Nodes (7): class DoubleValueEffect, class NullEffect, class WeaponCooldownEffect, Brotato/double_value_effect.gd, Brotato/weapon_cooldown_effect.gd, Brotato/null_effect.gd, Effect
+Nodes (9): class CharacterInfoPanel, class FloatingTextManagerShop, class KilledByContainer, class UpgradeUI, Brotato/character_info_panel.gd, Brotato/upgrade_ui.gd, Brotato/floating_text_manager_shop.gd, FloatingTextManagerBase (+1 more)
 
 ### Community 77 - "class Entity"
 Cohesion: 0.12
@@ -535,17 +533,17 @@ Nodes (7): class UIItemElement, class UIUpgradeToProcessElement, Brotato/ui_inpu
 Cohesion: 0.12
 Nodes (3): Brotato/generate_achievement_loc_file.gd, Brotato/mass_update_files.gd, EditorScript
 
-### Community 86 - "class GOGPlatform"
+### Community 84 - "PlayerProjectile"
+Cohesion: 0.12
+Nodes (8): class DelayedPlayerProjectile, class FireballProjectile, class ParticleAcceleratorProjectile, Brotato/particle_accelerator_projectile.gd, Brotato/taser_projectile.gd, Brotato/delayed_player_projectile.gd, Brotato/fireball_projectile.gd, PlayerProjectile
+
+### Community 87 - "class GOGPlatform"
 Cohesion: 0.12
 Nodes (3): class GOGPlatform, Brotato/gog.gd, gog_bindings.gdns
 
-### Community 87 - "ProgressData"
+### Community 90 - "CoopService"
 Cohesion: 0.13
-Nodes (9): class GoldBag, class PopupBetaSaveWarning, Brotato/gold_bag.gd, Brotato/coop_end_run.gd, Brotato/end_run.gd, Brotato/popup_beta_save_warning.gd, BaseEndRun, PopupAnouncement (+1 more)
-
-### Community 90 - "RunData"
-Cohesion: 0.13
-Nodes (9): class BuilderTurretEffect, class BulletHell, Brotato/builder_turret_effect.gd, Brotato/linked_stats.gd, Brotato/coop_player_selector.gd, Carousel, TempStats, TurretEffect (+1 more)
+Nodes (5): class InputIcon, class LockedPanel, Brotato/coop_join_panel.gd, Brotato/locked_panel.gd, CoopService
 
 ### Community 94 - "Enemy"
 Cohesion: 0.13
@@ -555,49 +553,45 @@ Nodes (8): Brotato/bloated_spawner.gd, Brotato/corrupted_tree.gd, Brotato/fly.gd
 Cohesion: 0.13
 Nodes (6): Brotato/ui_service.gd, empty.png, projectile_material.tres, icon_replace_with_positive_color.tres, ban_item.wav, cant_buy.wav
 
-### Community 99 - "class FogViewport"
+### Community 97 - "Mod/coop_shop.gd"
+Cohesion: 0.13
+Nodes (3): Mod/coop_shop.gd, _on_game_lost_focus(), _ready()
+
+### Community 100 - "class FogViewport"
 Cohesion: 0.14
 Nodes (4): class FogViewport, Brotato/print_viewport.gd, Brotato/fog_viewport.gd, Viewport
 
-### Community 101 - "class ItemEnemy"
+### Community 102 - "class ItemEnemy"
 Cohesion: 0.14
 Nodes (5): class ItemEnemy, class ItemPet, Brotato/ItemEnemy.gd, Brotato/ItemPet.gd, ItemEntity
-
-### Community 102 - "ItemService"
-Cohesion: 0.14
-Nodes (6): class KilledByContainer, class UITimeline, class UpgradeUI, Brotato/ui_timeline.gd, Brotato/upgrade_ui.gd, ItemService
 
 ### Community 103 - "Mod/mod_main.gd"
 Cohesion: 0.16
 Nodes (10): Mod/pause_menu.gd, Mod/retry_wave.gd, Mod/mod_main.gd, on_game_lost_focus(), pause(), _change_scene(), network_logger.gd, network_manager.gd (+2 more)
 
-### Community 104 - "Mod/coop_shop.gd"
-Cohesion: 0.14
-Nodes (3): Mod/coop_shop.gd, _on_game_lost_focus(), _ready()
-
-### Community 105 - "class BanButton"
-Cohesion: 0.15
-Nodes (7): class BanButton, class CoopButton, class EndlessButton, Brotato/ban_button.gd, Brotato/coop_button.gd, Brotato/endless_button.gd, CheckButton
-
-### Community 106 - "class CoopItemPopup"
+### Community 104 - "class CoopItemPopup"
 Cohesion: 0.15
 Nodes (3): class CoopItemPopup, Brotato/coop_item_popup.gd, ItemPopup
 
-### Community 107 - "class CoopUpgradesUIPlayerContainer"
+### Community 105 - "class CoopUpgradesUIPlayerContainer"
 Cohesion: 0.15
 Nodes (3): class CoopUpgradesUIPlayerContainer, Brotato/coop_upgrades_ui_player_container.gd, UpgradesUIPlayerContainer
 
-### Community 111 - "class MeleeShootingData"
+### Community 109 - "class MeleeShootingData"
 Cohesion: 0.15
 Nodes (5): class MeleeShootingData, class RangedShootingData, Brotato/melee_shooting_data.gd, Brotato/ranged_shooting_data.gd, ShootingData
 
-### Community 115 - "class Boss"
+### Community 114 - "class Boss"
 Cohesion: 0.17
 Nodes (3): class Boss, Brotato/boss.gd, zombie_voice_general_emote_05.wav
 
-### Community 116 - "class DifficultySelection"
+### Community 115 - "class DifficultySelection"
 Cohesion: 0.17
 Nodes (3): class DifficultySelection, Brotato/difficulty_selection.gd, BaseSelection
+
+### Community 116 - "ProgressData"
+Cohesion: 0.17
+Nodes (8): class GoldBag, class PopupBetaSaveWarning, class RailGunProjectile, Brotato/gold_bag.gd, Brotato/rail_gun_projectile.gd, Brotato/popup_beta_save_warning.gd, PopupAnouncement, ProgressData
 
 ### Community 117 - "VBoxContainer"
 Cohesion: 0.17
@@ -639,13 +633,17 @@ Nodes (5): class MeleeWeaponShootingBehavior, class RangedWeaponShootingBehavior
 Cohesion: 0.18
 Nodes (4): class MenuCredits, Brotato/pause.gd, Brotato/menu_credits.gd, Control
 
-### Community 135 - "class PercentDamageTakenEnemyEffectBehavior"
+### Community 134 - "class PercentDamageTakenEnemyEffectBehavior"
 Cohesion: 0.18
 Nodes (3): class PercentDamageTakenEnemyEffectBehavior, Brotato/percent_damage_taken_enemy_effect_behavior.gd, EnemyEffectBehavior
 
-### Community 138 - "class UIConsumableToProcessList"
+### Community 137 - "class UIConsumableToProcessList"
 Cohesion: 0.18
 Nodes (5): class UIConsumableToProcessList, class UIUpgradeToProcessList, Brotato/ui_consumable_to_process_list.gd, Brotato/ui_upgrade_to_process_list.gd, UIItemList
+
+### Community 138 - "ZoneService"
+Cohesion: 0.20
+Nodes (6): class BulletHellProjectile, class EnemyProjectileRotating, Brotato/enemy_projectile_rotating.gd, Brotato/bullet_hell_projectile.gd, EnemyProjectile, ZoneService
 
 ### Community 141 - "class CoopShopHint"
 Cohesion: 0.20
@@ -663,13 +661,9 @@ Nodes (3): class DocMoth, Brotato/doc_moth.gd, Pet
 Cohesion: 0.20
 Nodes (3): class ItemExplodingEffect, Brotato/item_exploding_effect.gd, ExplodingEffect
 
-### Community 154 - "Mod/coop_service.gd"
+### Community 155 - "Mod/coop_service.gd"
 Cohesion: 0.20
 Nodes (4): Mod/coop_service.gd, _ready(), get_remapped_player_device(), is_player_using_gamepad()
-
-### Community 155 - "ZoneService"
-Cohesion: 0.22
-Nodes (4): class BaseEndRun, class BulletHellProjectile, Brotato/base_end_run.gd, ZoneService
 
 ### Community 157 - "NullEffect"
 Cohesion: 0.22
@@ -683,111 +677,111 @@ Nodes (5): class Consumable, class Gold, Brotato/consumable.gd, Brotato/gold.gd,
 Cohesion: 0.22
 Nodes (5): class Custombutton, class ExpandButton, Brotato/button_expand.gd, Brotato/CustomButton.gd, MyMenuButton
 
-### Community 167 - "CoopService"
-Cohesion: 0.22
-Nodes (4): class InputIcon, class LockedPanel, Brotato/locked_panel.gd, CoopService
-
-### Community 168 - "class Jellyshield"
+### Community 167 - "class Jellyshield"
 Cohesion: 0.22
 Nodes (3): class Jellyshield, Brotato/jellyshield.gd, Entity
 
-### Community 173 - "class SynergyPanel"
+### Community 172 - "class SynergyPanel"
 Cohesion: 0.25
 Nodes (6): class SynergyPanel, class TagPanel, Brotato/synergy_panel.gd, Brotato/tag_panel.gd, font_smallest_text.tres, font_very_smallest_text.tres
 
-### Community 175 - "class UIDimScreen"
+### Community 174 - "class UIDimScreen"
 Cohesion: 0.22
 Nodes (4): class UIDimScreen, Brotato/ui_dim_screen.gd, Brotato/damage_vignette.gd, ColorRect
 
-### Community 184 - "class CharacterSelectionInventory"
+### Community 183 - "class CharacterSelectionInventory"
 Cohesion: 0.25
 Nodes (5): class CharacterSelectionInventory, class EliteContainer, Brotato/character_selection_inventory.gd, Brotato/elite_container.gd, Inventory
 
-### Community 185 - "class CoopBanShopHint"
+### Community 184 - "class CoopBanShopHint"
 Cohesion: 0.25
 Nodes (5): class CoopBanShopHint, class CoopShopStealHint, Brotato/coop_ban_shop_hint.gd, Brotato/coop_shop_steal_hint.gd, CoopShopHint
 
-### Community 187 - "MovementBehavior"
+### Community 186 - "MovementBehavior"
 Cohesion: 0.25
 Nodes (5): class GoTowardsMapCenterMovementBehavior, class PlayerMovementBehavior, Brotato/go_towards_map_center_movement_behavior.gd, Brotato/player_movement_behavior.gd, MovementBehavior
 
-### Community 192 - "class RerollButton"
+### Community 191 - "class RerollButton"
 Cohesion: 0.25
 Nodes (3): class RerollButton, Brotato/reroll_button.gd, ButtonWithIcon
 
-### Community 197 - "class TurretEffect"
+### Community 196 - "class TurretEffect"
 Cohesion: 0.25
 Nodes (3): class TurretEffect, Brotato/turret_effect.gd, StructureEffect
 
-### Community 198 - "class UIProgressBar"
+### Community 197 - "class UIProgressBar"
 Cohesion: 0.25
 Nodes (3): class UIProgressBar, Brotato/ui_progress_bar.gd, TextureProgress
 
-### Community 199 - "class WaveTimer"
+### Community 198 - "class WaveTimer"
 Cohesion: 0.25
 Nodes (3): class WaveTimer, Brotato/wave_timer.gd, Timer
 
-### Community 200 - "Brotato/cursor_manager.gd"
+### Community 199 - "Brotato/cursor_manager.gd"
 Cohesion: 0.25
 Nodes (3): Brotato/cursor_manager.gd, custom_cursor.png, manual_cursor.png
 
-### Community 203 - "Brotato/sound_manager_2d.gd"
+### Community 202 - "Brotato/sound_manager_2d.gd"
 Cohesion: 0.25
 Nodes (3): Brotato/sound_manager_2d.gd, Brotato/sound_manager.gd, SoundManagerParent
 
-### Community 210 - "class EnemyProjectileRotating"
-Cohesion: 0.29
-Nodes (4): class EnemyProjectileRotating, Brotato/enemy_projectile_rotating.gd, Brotato/bullet_hell_projectile.gd, EnemyProjectile
+### Community 204 - "Brotato/coop_end_run.gd"
+Cohesion: 0.25
+Nodes (3): Brotato/coop_end_run.gd, Brotato/end_run.gd, BaseEndRun
 
-### Community 211 - "class IconPanel"
+### Community 205 - "Mod/upgrades_ui.gd"
+Cohesion: 0.25
+Nodes (4): Mod/upgrades_ui.gd, _ready(), _show_next_player_options(), upgrades_ui.gd
+
+### Community 212 - "class IconPanel"
 Cohesion: 0.29
 Nodes (3): class IconPanel, Brotato/icon_panel.gd, Panel
 
-### Community 214 - "class Neutral"
+### Community 215 - "class Neutral"
 Cohesion: 0.29
 Nodes (3): class Neutral, Brotato/neutral.gd, Unit
 
-### Community 225 - "Brotato/crash_reporter.gd"
+### Community 226 - "Brotato/crash_reporter.gd"
 Cohesion: 0.29
 Nodes (3): Brotato/crash_reporter.gd, epic.tres, steam.tres
 
-### Community 243 - "class MyTileMap"
+### Community 244 - "class MyTileMap"
 Cohesion: 0.33
 Nodes (3): class MyTileMap, Brotato/my_tile_map.gd, TileMap
 
-### Community 255 - "class CharacterDescription"
+### Community 253 - "class BuilderTurretEffect"
+Cohesion: 0.40
+Nodes (3): class BuilderTurretEffect, Brotato/builder_turret_effect.gd, TurretEffect
+
+### Community 254 - "class CharacterDescription"
 Cohesion: 0.40
 Nodes (3): class CharacterDescription, Brotato/character_description.gd, ItemDescription
 
-### Community 258 - "class FloatingTextManagerShop"
-Cohesion: 0.40
-Nodes (3): class FloatingTextManagerShop, Brotato/floating_text_manager_shop.gd, FloatingTextManagerBase
-
-### Community 265 - "class MyTileMapLimits"
+### Community 264 - "class MyTileMapLimits"
 Cohesion: 0.40
 Nodes (3): class MyTileMapLimits, Brotato/my_tile_map_limits.gd, StaticBody2D
 
-### Community 266 - "class NullCharmEffect"
+### Community 265 - "class NullCharmEffect"
 Cohesion: 0.40
 Nodes (3): class NullCharmEffect, Brotato/null_charm_effect.gd, CharmEffect
 
-### Community 278 - "class WeaponEffectWithSubEffects"
+### Community 277 - "class WeaponEffectWithSubEffects"
 Cohesion: 0.40
 Nodes (3): class WeaponEffectWithSubEffects, Brotato/weapon_effect_with_sub_effect.gd, EffectWithSubEffects
 
-### Community 279 - "class WeaponGainStatForEveryStatEffect"
+### Community 278 - "class WeaponGainStatForEveryStatEffect"
 Cohesion: 0.40
 Nodes (3): class WeaponGainStatForEveryStatEffect, Brotato/weapon_gain_stat_for_every_stat_effect.gd, GainStatForEveryStatEffect
 
-### Community 280 - "class WeaponPercentDamageEffect"
+### Community 279 - "class WeaponPercentDamageEffect"
 Cohesion: 0.40
 Nodes (3): class WeaponPercentDamageEffect, Brotato/weapon_percent_damage_effect.gd, PercentDamageEffect
 
-### Community 281 - "Brotato/brotatools.gd"
+### Community 280 - "Brotato/brotatools.gd"
 Cohesion: 0.40
 Nodes (3): Brotato/brotatools.gd, EditorPlugin, brotatools_ui.tscn
 
-### Community 285 - "Brotato/menu_options.gd"
+### Community 284 - "Brotato/menu_options.gd"
 Cohesion: 0.40
 Nodes (5): Brotato/menu_options.gd, font_32_outline.tres, font_35_outline.tres, font_40_outline.tres, font_menus.tres
 
@@ -795,28 +789,28 @@ Nodes (5): Brotato/menu_options.gd, font_32_outline.tres, font_35_outline.tres, 
 Cohesion: 0.50
 Nodes (4): class ModLoaderCurrentOptions, Brotato/options_current.gd, default.tres, editor.tres
 
-### Community 301 - "Brotato/setup_utils.gd"
+### Community 299 - "Brotato/setup_utils.gd"
 Cohesion: 0.67
 Nodes (3): class ModLoaderSetupUtils, Brotato/setup_utils.gd, setup_log.gd
 
 ## Knowledge Gaps
 - **463 isolated node(s):** `network_manager.gd`, `class NetworkConstants`, `class NetworkLogger`, `network_constants.gd`, `well_rounded_data.tres` (+458 more)
-  These have ≤1 connection - possible missing edges. (Counts symbols only; 3914 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **215 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges. (Counts symbols only; 3919 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **214 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `RunData` connect `RunData` to `Brotato/run_data.gd`, `Brotato/progress_data.gd`, `class MenuOptions`, `Brotato/utils.gd`, `class Main`, `class Player`, `class DebugMenu`, `Brotato/item_service.gd`, `class BaseShop`, `Mod/network_manager.gd`, `class InventoryElement`, `class Unit`, `class Hitbox`, `class Weapon`, `PetEffect`, `class GroupOfBullet`, `class UIItemList`, `Brotato/weapon_service.gd`, `class ChargingAttackBehavior`, `class Enemy`, `class Turret`, `class CharacterSelection`, `class ShopItem`, `class ItemPopup`, `class BaseSelection`, `class BuilderTurret`, `class Shop`, `class ShopItemsContainer`, `class EntitySpawner`, `class ButtonWithIcon`, `class CoopShop`, `class MenuCodex`, `class MainMenu`, `Mod/main.gd`, `PanelContainer`, `class ItemParentData`, `class BurningParticles`, `class UpgradesUI`, `class UpgradesUIPlayerContainer`, `Node2D`, `class PopupManager`, `Brotato/challenge_service.gd`, `Brotato/coop_service.gd`, `class BotOMine`, `class MyCamera`, `class Pet`, `Brotato/input_service.gd`, `class Blazemander`, `class CharacterPanelUI`, `class CoopShopPlayerContainer`, `Effect`, `class BonkDog`, `class Effect`, `class FloatingTextManager`, `ProgressData`, `class IngameMainMenu`, `class StatContainer`, `class WeaponSelection`, `class FogViewport`, `class ItemDescription`, `ItemService`, `Mod/coop_shop.gd`, `class BanButton`, `class CoopItemPopup`, `class CoopUpgradesUIPlayerContainer`, `class LevelContainer`, `class Lootworm`, `class Ratzilla`, `class Scapegoat`, `Brotato/zone_service.gd`, `class Boss`, `class DifficultySelection`, `class MeleeWeapon`, `class PlayerRunData`, `class WaveManager`, `class GainStatForKilledEnemiesWhileBurning`, `class OnlineCoopDialog`, `class PercentDamageTakenEnemyEffectBehavior`, `class CoopShopHint`, `Container`, `class DocMoth`, `class ItemExplodingEffect`, `class PauseMenu`, `class PercentDamageEffect`, `class Pursuer`, `Brotato/coop_resume.gd`, `ZoneService`, `NullEffect`, `class ChanceStatDamageEffect`, `class ClassBonusEffect`, `class ConvertStatEffect`, `class DLCData`, `class DoubleKeyValueEffect`, `class GainStatForEveryStatEffect`, `class Jellyshield`, `class PlayerUIElements`, `class StatCapEffect`, `class SynergyPanel`, `class TempStatsPerIntervalEffect`, `class WeaponTypeBonusEffect`, `Brotato/entity_service.gd`, `Brotato/streamplay.gd`, `class BurnChanceEffect`, `class CharacterSelectionInventory`, `class CoopBanShopHint`, `MovementBehavior`, `class LinearScalingEffect`, `class ProjectileEffect`, `class RerollButton`, `class SwapMaxMinStatEffect`, `class TitleScreen`, `Brotato/debug_service.gd`, `Brotato/temp_stats.gd`, `class EffectWithSubEffects`, `class EndRunPlayerContainer`, `class EnemyProjectileRotating`, `class IconPanel`, `class Neutral`, `class PlayerGearContainer`, `class ProgressDataLoaderV1`, `class StatGainsModificationEffect`, `class StructureEffect`, `class WeaponStackEffect`, `class DetectTargetMovementBehavior`, `class ExtraEnemyEffect`, `class MenuConfirm`, `class MenuEndRun`, `class MenuRestart`, `class MenuRetryWave`, `class PetEffect`, `class PlayerHealthStatEffect`, `Brotato/coop_join_panel.gd`, `class DifficultyScore`, `class Healer`, `class ItemServiceGetShopItemsArgs`, `class Looter`, `class Pivot`, `Brotato/focus_emulator_signal.gd`, `class ConsumableDamageEffect`, `class ConsumableHealingEffect`?**
-  _High betweenness centrality (0.488) - this node is a cross-community bridge._
+- **Why does `RunData` connect `RunData` to `Brotato/run_data.gd`, `Brotato/progress_data.gd`, `class MenuOptions`, `Brotato/utils.gd`, `class Main`, `class Player`, `class DebugMenu`, `Brotato/item_service.gd`, `class BaseShop`, `Mod/network_manager.gd`, `class InventoryElement`, `class Unit`, `class Hitbox`, `class Weapon`, `PetEffect`, `class GroupOfBullet`, `class UIItemList`, `Brotato/weapon_service.gd`, `class ChargingAttackBehavior`, `class Enemy`, `class Turret`, `class CharacterSelection`, `class ShopItem`, `class ItemPopup`, `class BaseSelection`, `class BuilderTurret`, `class Shop`, `class ShopItemsContainer`, `class EntitySpawner`, `class ButtonWithIcon`, `class CoopShop`, `class MenuCodex`, `class MainMenu`, `Mod/main.gd`, `Effect`, `class ItemParentData`, `class BurningParticles`, `class UpgradesUIPlayerContainer`, `Node2D`, `class PopupManager`, `Brotato/challenge_service.gd`, `Brotato/coop_service.gd`, `class BotOMine`, `class MyCamera`, `class Pet`, `Brotato/input_service.gd`, `class Blazemander`, `class CharacterPanelUI`, `class CoopShopPlayerContainer`, `ItemService`, `class BonkDog`, `class Effect`, `class FloatingTextManager`, `class IngameMainMenu`, `CoopService`, `class StatContainer`, `class WeaponSelection`, `Mod/coop_shop.gd`, `class FogViewport`, `class ItemDescription`, `class CoopItemPopup`, `class CoopUpgradesUIPlayerContainer`, `class LevelContainer`, `class Lootworm`, `class Ratzilla`, `class Scapegoat`, `class UpgradesUI`, `Brotato/zone_service.gd`, `class Boss`, `class DifficultySelection`, `class MeleeWeapon`, `class PlayerRunData`, `class WaveManager`, `class GainStatForKilledEnemiesWhileBurning`, `class PercentDamageTakenEnemyEffectBehavior`, `ZoneService`, `class CoopShopHint`, `Container`, `class DocMoth`, `class ItemExplodingEffect`, `class OnlineCoopDialog`, `class PauseMenu`, `class PercentDamageEffect`, `class Pursuer`, `Brotato/coop_resume.gd`, `NullEffect`, `class ChanceStatDamageEffect`, `class ClassBonusEffect`, `class ConvertStatEffect`, `class DLCData`, `class DoubleKeyValueEffect`, `class GainStatForEveryStatEffect`, `class Jellyshield`, `class PlayerUIElements`, `class StatCapEffect`, `class SynergyPanel`, `class TempStatsPerIntervalEffect`, `class WeaponTypeBonusEffect`, `Brotato/entity_service.gd`, `Brotato/streamplay.gd`, `class BurnChanceEffect`, `class CharacterSelectionInventory`, `class CoopBanShopHint`, `MovementBehavior`, `class LinearScalingEffect`, `class ProjectileEffect`, `class RerollButton`, `class SwapMaxMinStatEffect`, `class TitleScreen`, `Brotato/debug_service.gd`, `Brotato/temp_stats.gd`, `Brotato/coop_end_run.gd`, `Mod/upgrades_ui.gd`, `class DoubleValueEffect`, `class EffectWithSubEffects`, `class EndRunPlayerContainer`, `class IconPanel`, `class Neutral`, `class PlayerGearContainer`, `class ProgressDataLoaderV1`, `class StatGainsModificationEffect`, `class StructureEffect`, `class WeaponStackEffect`, `class BaseEndRun`, `class DetectTargetMovementBehavior`, `class MenuConfirm`, `class MenuEndRun`, `class MenuRestart`, `class MenuRetryWave`, `class PlayerHealthStatEffect`, `class UITimeline`, `class BuilderTurretEffect`, `class DifficultyScore`, `class Healer`, `class ItemServiceGetShopItemsArgs`, `class Looter`, `class Pivot`, `Brotato/focus_emulator_signal.gd`, `class ConsumableDamageEffect`, `class ConsumableHealingEffect`?**
+  _High betweenness centrality (0.460) - this node is a cross-community bridge._
 - **Are the 156 inferred relationships involving `RunData` (e.g. with `class BanButton` and `class BaseEndRun`) actually correct?**
   _`RunData` has 156 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `network_manager.gd`, `class NetworkConstants`, `class NetworkLogger` to the rest of the system?**
   _463 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Brotato/run_data.gd` be split into smaller, more focused modules?**
   _Cohesion score 0.013888888888888888 - nodes in this community are weakly interconnected._
-- **Why does `ProgressData` connect `ProgressData` to `Brotato/run_data.gd`, `Brotato/progress_data.gd`, `class MenuOptions`, `Brotato/utils.gd`, `class Main`, `class Player`, `class DebugMenu`, `Brotato/item_service.gd`, `class BaseShop`, `Mod/network_manager.gd`, `class InventoryElement`, `class WeaponData`, `class Hitbox`, `class Weapon`, `class GroupOfBullet`, `class Enemy`, `class Turret`, `class CharacterSelection`, `class ShopItem`, `class BugReporterInput`, `class WeaponStats`, `class ButtonWithIcon`, `class MenuCodex`, `class MainMenu`, `class MenuProfile`, `Mod/main.gd`, `class ProgressDataLoaderBeta`, `class ProgressDataLoaderV3`, `OptionButton`, `PanelContainer`, `class ItemParentData`, `class UpgradesUIPlayerContainer`, `class RailGunProjectile`, `Brotato/challenge_service.gd`, `class Pet`, `Brotato/input_service.gd`, `class CharacterPanelUI`, `class EffectsManager`, `class EpicPlatform`, `class FloatingTextManager`, `class IngameMainMenu`, `class PlayerExplosion`, `class StatContainer`, `class WeaponSelection`, `Brotato/ui_service.gd`, `class ItemEnemy`, `ItemService`, `Mod/mod_main.gd`, `Mod/coop_shop.gd`, `class BanButton`, `class Scapegoat`, `class Boss`, `class DifficultySelection`, `class WaveManager`, `Control`, `class CoopShopHint`, `class EvilMob`, `class PauseMenu`, `Brotato/skin_manager.gd`, `ZoneService`, `class Jellyshield`, `class UIDimScreen`, `class ZoneUI`, `Brotato/announcement_manager.gd`, `Brotato/streamplay.gd`, `class CharacterSelectionInventory`, `class FloatingTextManagerBase`, `MovementBehavior`, `class ProgressionUI`, `class RerollButton`, `class TitleScreen`, `Brotato/debug_service.gd`, `class Neutral`, `class ProgressDataLoaderV1`, `class Screenshaker`, `Brotato/music_manager.gd`, `Brotato/text.gd`, `class EffectLine`, `class MenuConfirm`, `class MenuRestart`, `class MenuRetryWave`, `class SecondaryStatContainer`, `class SortInventoryButton`, `class DifficultyScore`, `class ChallengeAndRewardUI`?**
-  _High betweenness centrality (0.207) - this node is a cross-community bridge._
+- **Why does `ProgressData` connect `ProgressData` to `Brotato/run_data.gd`, `Brotato/progress_data.gd`, `class MenuOptions`, `Brotato/utils.gd`, `class Main`, `class Player`, `class DebugMenu`, `Brotato/item_service.gd`, `class BaseShop`, `Mod/network_manager.gd`, `class InventoryElement`, `class WeaponData`, `class Hitbox`, `class Weapon`, `class GroupOfBullet`, `class Enemy`, `class Turret`, `class CharacterSelection`, `class ShopItem`, `class BugReporterInput`, `class WeaponStats`, `class SortInventoryButton`, `class ButtonWithIcon`, `class MenuCodex`, `class MainMenu`, `class MenuProfile`, `Mod/main.gd`, `RunData`, `class ProgressDataLoaderBeta`, `class ProgressDataLoaderV3`, `class ItemParentData`, `class UpgradesUIPlayerContainer`, `Brotato/challenge_service.gd`, `class Pet`, `Brotato/input_service.gd`, `class CharacterPanelUI`, `ItemService`, `class EffectsManager`, `class EpicPlatform`, `PlayerProjectile`, `class FloatingTextManager`, `class IngameMainMenu`, `class PlayerExplosion`, `class StatContainer`, `class WeaponSelection`, `Brotato/ui_service.gd`, `Mod/coop_shop.gd`, `class ItemEnemy`, `Mod/mod_main.gd`, `class Scapegoat`, `class Boss`, `class DifficultySelection`, `class WaveManager`, `Control`, `class CoopShopHint`, `class EvilMob`, `class PauseMenu`, `Brotato/skin_manager.gd`, `class Jellyshield`, `class UIDimScreen`, `class ZoneUI`, `Brotato/announcement_manager.gd`, `Brotato/streamplay.gd`, `class CharacterSelectionInventory`, `class FloatingTextManagerBase`, `MovementBehavior`, `class ProgressionUI`, `class RerollButton`, `class TitleScreen`, `Brotato/debug_service.gd`, `Brotato/coop_end_run.gd`, `class Neutral`, `class ProgressDataLoaderV1`, `class Screenshaker`, `Brotato/music_manager.gd`, `Brotato/text.gd`, `class BaseEndRun`, `class EffectLine`, `class MenuConfirm`, `class MenuRestart`, `class MenuRetryWave`, `class SecondaryStatContainer`, `class UITimeline`, `class DifficultyScore`, `class ChallengeAndRewardUI`?**
+  _High betweenness centrality (0.221) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `Brotato/run_data.gd` (e.g. with `ItemService` and `ProgressData`) actually correct?**
   _`Brotato/run_data.gd` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **Should `Brotato/progress_data.gd` be split into smaller, more focused modules?**

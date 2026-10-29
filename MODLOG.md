@@ -126,6 +126,39 @@
   - `real_game_postwave_test.py`: 7/7 майлстоунов PASS, 0 ошибок.
   - `real_game_death_test.py`: 9/9 майлстоунов PASS, 0 ошибок.
 
+### 2.9. Устранение гонок состояний магазина, ящиков, дропа и устойчивость к дисконнектам
+- **Проблемы**:
+  1. Покупки Хоста (игрок 0) в магазине не рассылались Клиенту через RPC, из-за чего на Клиенте не списывалось золото Хоста, не закрывалась карточка товара и купленный предмет/оружие отсутствовали в `RunData.players_data[0]`.
+  2. В `coop_shop.gd` кнопка `reroll_btn` дублировала подключение `_on_client_reroll_pressed()`, вызывая двойной RPC-запрос на Хост за один клик.
+  3. В `upgrades_ui.gd` при живом клике игрока выбор карточки происходил локально, а пришедший ответ `rpc_confirm_upgrade` / `rpc_confirm_crate_take` повторно нажимал кнопку, прокликивая следующий апгрейд.
+  4. На Клиенте кукла Хоста могла коснуться монеты, вызывая отправку `rpc_request_item_pickup` с `player_index = 0`.
+  5. В `spawn_gold` и `spawn_consumables` отсутствовала проверка `_cleaning_up` после корутины `yield(..., "ready")`.
+  6. На Клиенте в `_physics_process` очереди `queue_to_spawn` и `queue_to_spawn_bosses` не очищались, создавая риск фантомных миньонов от AI боссов/элиток.
+  7. При дисконнекте Клиента игра на Хосте зависала в магазине или `UpgradesUI` из-за ожидания готовности отключенного игрока.
+- **Решение**:
+  - В `extensions/ui/menus/shop/coop_shop.gd`:
+    - Перехвачен `on_shop_item_bought`: покупки Хоста автоматически рассылают `rpc_confirm_shop_buy`.
+    - Убран дублирующий коннект на `reroll_btn` в `_setup_coop_shop_network()`.
+    - Добавлен флаг `_reroll_pending` для блокировки спама реролла.
+  - В `global/network_manager.gd`:
+    - Добавлен хелпер `get_resource_path(res)` для надежного резолвинга путей дублированных ресурсов.
+    - В `rpc_confirm_shop_buy`: на Клиенте купленный Хостом предмет/оружие добавляется в `RunData.players_data[0]` через `add_weapon` / `add_item`.
+    - В `rpc_confirm_upgrade` и `rpc_confirm_crate_take`: добавлена проверка `_upgrade_choice_pending` / `_crate_choice_pending`, исключающая двойной клик карточек.
+    - В `_on_peer_disconnected` добавлены `_handle_disconnected_player` и `is_player_slot_active`, чтобы кукла отключившегося пира переводилась в `die()`, очереди `UpgradesUI` сбрасывались, а готовность магазина проверялась только по оставшимся активным слотам.
+    - В `_on_server_disconnected` на Клиенте добавлен автоматический возврат в главное меню (`title_screen_scene`).
+  - В `extensions/main.gd`:
+    - В `on_gold_picked_up` и `on_consumable_picked_up` на Клиенте добавлена проверка `player_index == net.my_player_index`.
+    - Добавлена проверка `_cleaning_up` после `yield(..., "ready")` в `spawn_gold` и `spawn_consumables`.
+    - Добавлен сброс `scale = Vector2.ONE`, `boosted = 0`, `value = Gold.INITIAL_VALUE` при взятии монеты из пула.
+    - В `_physics_process` Клиента очищаются `queue_to_spawn` и `queue_to_spawn_bosses`.
+  - В `extensions/entities/units/movement_behaviors/player_movement_behavior.gd`:
+    - При гибели игрока гарантированно однократно отправляется нулевой вектор `(0, 0)` для сброса залипшего ввода.
+- **Результаты верификации (2 реальных процесса на видимом рабочем столе):**
+  - `real_game_arena_test.py`: 8/8 майлстоунов PASS, 0 ошибок.
+  - `real_game_death_test.py`: 9/9 майлстоунов PASS, 0 ошибок.
+  - `real_game_postwave_test.py`: 7/7 майлстоунов PASS, 0 ошибок.
+  - Визуальная верификация: скриншоты подтвердили корректное разделение экрана, синхронизацию витрины магазина, открытие сундуков и переход на волну 2.
+
 ---
 
 ## 3. Статус автоматических тестов (Real Game Testing)

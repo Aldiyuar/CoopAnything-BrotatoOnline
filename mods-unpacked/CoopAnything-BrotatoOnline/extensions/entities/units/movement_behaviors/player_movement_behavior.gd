@@ -12,6 +12,12 @@ func get_movement() -> Vector2:
 	
 	# If parent player is dead, cease all movement and input immediately
 	if _parent and is_instance_valid(_parent) and _parent.dead:
+		if _last_sent_movement != Vector2.ZERO:
+			_last_sent_movement = Vector2.ZERO
+			if _net_mgr.is_client():
+				_net_mgr.rpc_unreliable_id(1, "rpc_send_player_input", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+			elif _net_mgr.is_host():
+				_net_mgr.rpc_unreliable("rpc_broadcast_host_input", 0.0, 0.0, 0.0, 0.0)
 		return Vector2.ZERO
 	
 	# If this player is a remote network player on the Host (virtual device >= 100)
