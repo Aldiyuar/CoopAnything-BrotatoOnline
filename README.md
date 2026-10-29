@@ -11,12 +11,16 @@
 
 ## Features
 
-- **Host-Authoritative Networking:**
+- **Host-Authoritative Networking & Combat:**
   - Fast UDP connection on port `7777` with zero third-party external dependencies.
-  - Host authoritatively controls wave timing, enemy spawns, loot generation, and shop progression.
+  - Host authoritatively controls wave timing, enemy spawns, combat calculations, loot generation, and shop progression.
+  - **No Double-Damage:** All player weapons are simulated authoritatively on the Host, eliminating double-damage bugs while keeping responsive local visual feedback on clients.
 - **20 Hz Player Position & State Sync:**
   - Smooth interpolation for remote puppet characters with automatic drift reconciliation.
   - Real-time client input replication (`rpc_send_player_input`).
+- **Player Death Replication & Spectator Support:**
+  - Individual player deaths are broadcast via `rpc_player_died`, instantly disabling movement input and hiding collision/weapons.
+  - In the event of a team wipe, the Retry/End Run window (`retry_wave.gd`) synchronizes scene transitions across all clients to `coop_end_run.tscn`.
 - **Shared Enemies & World Spawns:**
   - All players fight the exact same enemies and trees at identical coordinates.
   - Rogue local client wave spawning is cleanly decoupled.
@@ -45,20 +49,22 @@ Brotato_Project/
 │       │   ├── network_logger.gd    # Unified logging
 │       │   └── network_constants.gd # Ports, roles, packet definitions
 │       ├── extensions/
-│       │   ├── main.gd              # Arena, enemies, ground loot hooks
+│       │   ├── main.gd              # Arena, enemies, combat & ground loot hooks
 │       │   ├── singletons/          # CoopService virtual device mapping (100+)
-│       │   ├── entities/            # PlayerMovementBehavior network input
-│       │   └── ui/                  # Split CoopShop & UpgradesUI hooks
+│       │   ├── entities/            # PlayerMovementBehavior network input & death lock
+│       │   └── ui/                  # Split CoopShop, UpgradesUI, RetryWave & Pause hooks
 │       └── ui/
 │           └── online_dialog.gd     # In-game host/join GUI dialog
 ├── tools/                           # Automated multi-process QA suites
 │   ├── build_mod.py                 # Zip packager and deployment script
 │   ├── real_game_arena_test.py      # 2-process arena combat verification
+│   ├── real_game_death_test.py      # 2-process death, wipe & GameOver verification
 │   ├── real_game_postwave_test.py   # 2-process shop & crates verification
 │   └── build_full_graph.py          # Graphify AST knowledge graph generator
 ├── graphify-out/                    # Architecture knowledge graph (AST)
 ├── MODLOG.md                        # Verified engineering change log
-└── PROMPT_FOR_AI_TESTER.md          # Comprehensive AI developer prompt
+├── PROMPT_FOR_AI_TESTER.md          # Comprehensive AI developer prompt
+└── PROMPT_FOR_EXTERNAL_AI_REVIEW.md # Prompt for external AI audit & review
 ```
 
 ---
@@ -76,6 +82,10 @@ The project includes automated end-to-end tests that spawn two visible game inst
 - **Arena Combat Test (movement, shared enemies, ground loot):**
   ```powershell
   python tools/real_game_arena_test.py
+  ```
+- **Player Death & GameOver Test (spectator, team wipe, end run sync):**
+  ```powershell
+  python tools/real_game_death_test.py
   ```
 - **Post-Wave Test (crates, upgrades, shop purchases, wave 2 transition):**
   ```powershell
