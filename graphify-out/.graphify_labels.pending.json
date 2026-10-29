@@ -1,10 +1,17 @@
 {
-  "0": "interactive_playtest.py",
-  "1": "manifest.json",
-  "2": "os",
-  "3": "watch_logs.py",
-  "4": "subprocess",
-  "5": "time",
-  "6": "sys",
-  "7": "real_game_shop_test.py"
+  "0": "os",
+  "1": "build_full_graph.py",
+  "2": "2. Архитектура и реализованные сетевые подсистемы (100% Verified)",
+  "3": "manifest.json",
+  "4": "CoopAnything-BrotatoOnline",
+  "5": "ИНСТРУКЦИЯ И СИСТЕМНЫЙ ПРОМПТ ДЛЯ AI-РАЗРАБОТЧИКА: BROTATO ONLINE CO-OP",
+  "6": "PROMPT_FOR_EXTERNAL_AI_REVIEW.md",
+  "10": "Mod/network_manager.gd",
+  "30": "Mod/main.gd",
+  "31": "class NetworkConstants",
+  "115": "Mod/coop_shop.gd",
+  "123": "class NetworkLogger",
+  "135": "class OnlineCoopDialog",
+  "246": "Mod/main_menu.gd",
+  "290": "Mod/player_movement_behavior.gd"
 }

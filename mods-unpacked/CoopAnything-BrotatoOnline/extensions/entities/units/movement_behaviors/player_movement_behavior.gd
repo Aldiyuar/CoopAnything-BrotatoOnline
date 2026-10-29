@@ -10,6 +10,10 @@ func get_movement() -> Vector2:
 	if not _net_mgr or not _net_mgr.is_online():
 		return .get_movement()
 	
+	# If parent player is dead, cease all movement and input immediately
+	if _parent and is_instance_valid(_parent) and _parent.dead:
+		return Vector2.ZERO
+	
 	# If this player is a remote network player on the Host (virtual device >= 100)
 	if device >= 100:
 		var remote_player_idx = device - 100

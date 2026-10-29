@@ -19,8 +19,9 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
-# Temporary Files
+# Temporary Files & Build Artifacts
 brotato.pid
+*.zip
 
 # Graphify Caches
 graphify-out/cache/

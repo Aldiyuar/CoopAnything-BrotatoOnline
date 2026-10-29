@@ -20,6 +20,7 @@ var shop_ready_states: Dictionary = {} # player_index -> bool
 var auto_start_match_on_connect: bool = false
 var auto_start_shop_test_on_connect: bool = false
 var auto_start_postwave_test_on_connect: bool = false
+var auto_start_death_test_on_connect: bool = false
 var shop_test_step: int = 0
 var shop_test_timer: float = 0.0
 var postwave_test_step: int = 0
@@ -30,6 +31,9 @@ var network_enemy_counter: int = 1000
 
 var ground_items: Dictionary = {} # item_id (int) -> Gold or Consumable Node
 var network_item_counter: int = 5000
+
+var current_match_seed: int = 123456789
+var cached_initial_shop_items: Dictionary = {}
 
 var _enet_peer: NetworkedMultiplayerENet = null
 var _accumulated_time: float = 0.0
@@ -131,11 +135,24 @@ func _check_cli_auto_args() -> void:
 			NetworkLogger.info("[QA_TEST] Auto-hosting post-wave full test via CLI...", "CoopAnything")
 			auto_start_postwave_test_on_connect = true
 			host_game(NetworkConstants.DEFAULT_PORT)
+		elif arg == "--coop-host-death":
+			NetworkLogger.info("[QA_TEST] Auto-hosting death & gameover test via CLI...", "CoopAnything")
+			auto_start_death_test_on_connect = true
+			host_game(NetworkConstants.DEFAULT_PORT)
 		elif arg == "--coop-join":
 			var ip = "127.0.0.1"
 			if i + 1 < args.size() and not args[i+1].begins_with("--"):
 				ip = args[i+1]
 			NetworkLogger.info("[QA_TEST] Auto-joining server at %s via CLI..." % ip, "CoopAnything")
+			join_game(ip, NetworkConstants.DEFAULT_PORT)
+			var run_data = get_node_or_null("/root/RunData")
+			if run_data and run_data.has_method("set_coop_run"):
+				run_data.set_coop_run(true)
+		elif arg == "--coop-join-death":
+			var ip = "127.0.0.1"
+			if i + 1 < args.size() and not args[i+1].begins_with("--"):
+				ip = args[i+1]
+			NetworkLogger.info("[QA_TEST] Auto-joining death test at %s via CLI..." % ip, "CoopAnything")
 			join_game(ip, NetworkConstants.DEFAULT_PORT)
 			var run_data = get_node_or_null("/root/RunData")
 			if run_data and run_data.has_method("set_coop_run"):
@@ -262,6 +279,9 @@ func _on_peer_connected(peer_id: int) -> void:
 			elif auto_start_postwave_test_on_connect:
 				var timer = get_tree().create_timer(1.2)
 				timer.connect("timeout", self, "start_postwave_test")
+			elif auto_start_death_test_on_connect:
+				var timer = get_tree().create_timer(1.2)
+				timer.connect("timeout", self, "start_death_test")
 		else:
 			# Server full, disconnect peer
 			_enet_peer.disconnect_peer(peer_id)
@@ -342,6 +362,17 @@ remote func rpc_send_player_input(movement_x: float, movement_y: float, aim_x: f
 					if dist > 80.0:
 						p.global_position = p.global_position.linear_interpolate(client_pos, 0.3)
 
+remotesync func rpc_player_died(player_index: int) -> void:
+	if is_client():
+		NetworkLogger.info("Client: Processing player %d death from Host" % player_index, "CoopAnything")
+		var main_scene = get_tree().current_scene
+		if main_scene and "_players" in main_scene and player_index < main_scene._players.size():
+			var p = main_scene._players[player_index]
+			if is_instance_valid(p) and not p.dead:
+				p.current_stats.health = 0
+				p.die()
+				NetworkLogger.success("Client: Player %d successfully transitioned to death state" % player_index, "CoopAnything")
+
 puppet func rpc_sync_player_positions(p_batch: Array) -> void:
 	if is_client():
 		var main_scene = get_tree().current_scene
@@ -350,29 +381,49 @@ puppet func rpc_sync_player_positions(p_batch: Array) -> void:
 				var p_idx: int = item[0]
 				var target_pos = Vector2(item[1], item[2])
 				var hp: int = item[3]
+				var is_dead: bool = (item.size() > 4 and item[4] == 1) or hp <= 0
 				if p_idx < main_scene._players.size():
 					var p = main_scene._players[p_idx]
-					if is_instance_valid(p) and not p.dead:
-						if p_idx != my_player_index:
-							var dist = p.global_position.distance_to(target_pos)
-							if dist > 150.0:
-								p.global_position = target_pos
+					if is_instance_valid(p):
+						if is_dead:
+							if not p.dead:
+								p.current_stats.health = 0
+								p.die()
+								NetworkLogger.info("Client: Player %d died (synced via position batch)" % p_idx, "CoopAnything")
+							continue
+						
+						if not p.dead:
+							if p_idx != my_player_index:
+								var dist = p.global_position.distance_to(target_pos)
+								if dist > 150.0:
+									p.global_position = target_pos
+								else:
+									p.global_position = p.global_position.linear_interpolate(target_pos, 0.45)
 							else:
-								p.global_position = p.global_position.linear_interpolate(target_pos, 0.45)
-						else:
-							var dist = p.global_position.distance_to(target_pos)
-							if dist > 60.0:
-								p.global_position = p.global_position.linear_interpolate(target_pos, 0.25)
-						p.current_stats.health = hp
-						if main_scene.has_method("_on_player_health_updated"):
-							main_scene._on_player_health_updated(p, hp, p.max_stats.health)
+								var dist = p.global_position.distance_to(target_pos)
+								if dist > 60.0:
+									p.global_position = p.global_position.linear_interpolate(target_pos, 0.25)
+							p.current_stats.health = hp
+							if main_scene.has_method("_on_player_health_updated"):
+								main_scene._on_player_health_updated(p, hp, p.max_stats.health)
 
 remotesync func rpc_sync_change_scene(path: String) -> void:
+	if path == "" or path == "res://":
+		NetworkLogger.warn("rpc_sync_change_scene called with invalid path: '%s'" % path, "CoopAnything")
+		return
 	if is_client():
 		NetworkLogger.info("Client: Syncing scene to %s from Host" % path, "CoopAnything")
 		var err = get_tree().change_scene(path)
 		if err != OK:
 			NetworkLogger.error("Client: Failed to change scene to %s: %d" % [path, err], "CoopAnything")
+
+remotesync func rpc_sync_rng_seed(p_seed: int) -> void:
+	current_match_seed = p_seed
+	NetworkLogger.info("RNG: Synchronized seed to %d" % p_seed, "CoopAnything")
+	seed(p_seed)
+	var utils = get_node_or_null("/root/Utils")
+	if utils and utils.has_method("set_rng_seed"):
+		utils.set_rng_seed(p_seed)
 
 func broadcast_wave_snapshot(snapshot: Dictionary) -> void:
 	if is_host():
@@ -387,9 +438,12 @@ func start_coop_match() -> void:
 remotesync func rpc_start_match() -> void:
 	NetworkLogger.info("Starting arena match for connected players!", "CoopAnything")
 	_setup_match_rundata()
+	if is_host():
+		var match_seed = (OS.get_system_time_msecs() ^ OS.get_process_id()) % 1000000000 + 1
+		rpc("rpc_sync_rng_seed", match_seed)
 	var target_scene = "res://main.tscn"
 	var menu_data = get_node_or_null("/root/MenuData")
-	if menu_data and menu_data.game_scene:
+	if menu_data and menu_data.game_scene and menu_data.game_scene != "" and menu_data.game_scene != "res://":
 		target_scene = menu_data.game_scene
 	var err = get_tree().change_scene(target_scene)
 	if err == OK:
@@ -470,6 +524,74 @@ func _run_arena_patrol_loop() -> void:
 	NetworkLogger.info("Arena patrol movement loop completed.", "CoopAnything")
 	capture_screen("05_active_movement")
 
+func start_death_test() -> void:
+	if not is_host():
+		return
+	NetworkLogger.info("Host: Launching 2-player death & game-over test...", "CoopAnything")
+	rpc("rpc_start_death_test")
+
+remotesync func rpc_start_death_test() -> void:
+	NetworkLogger.info("Starting death & game over test match!", "CoopAnything")
+	_setup_match_rundata()
+	if is_host():
+		var match_seed = (OS.get_system_time_msecs() ^ OS.get_process_id()) % 1000000000 + 1
+		rpc("rpc_sync_rng_seed", match_seed)
+	var target_scene = "res://main.tscn"
+	var menu_data = get_node_or_null("/root/MenuData")
+	if menu_data and menu_data.game_scene and menu_data.game_scene != "" and menu_data.game_scene != "res://":
+		target_scene = menu_data.game_scene
+	var err = get_tree().change_scene(target_scene)
+	if err == OK:
+		NetworkLogger.success("Death test: Arena scene loaded successfully!", "CoopAnything")
+		call_deferred("_schedule_death_test_sequence")
+	else:
+		NetworkLogger.error("Failed to load arena scene for death test: %d" % err, "CoopAnything")
+
+func _schedule_death_test_sequence() -> void:
+	call_deferred("_run_arena_patrol_loop")
+	if not is_host():
+		return
+	
+	# t = 5.0s: Inflict lethal damage on Player 1 (Client)
+	var t1 = get_tree().create_timer(5.0)
+	t1.connect("timeout", self, "_death_test_kill_p1")
+
+func _death_test_kill_p1() -> void:
+	var main_scene = get_tree().current_scene
+	if main_scene and "_players" in main_scene and main_scene._players.size() > 1:
+		var p1 = main_scene._players[1]
+		if is_instance_valid(p1) and not p1.dead:
+			NetworkLogger.info("[QA_TEST] Host: Inflicting lethal damage to Player 1...", "CoopAnything")
+			var args = TakeDamageArgs.new(0)
+			p1.take_damage(999, args)
+			call_deferred("capture_screen", "death_01_client_player_died")
+	
+	# t = 11.0s: Inflict lethal damage on Player 0 (Host) -> leads to team wipe and Game Over
+	var t2 = get_tree().create_timer(6.0)
+	t2.connect("timeout", self, "_death_test_kill_p0")
+
+func _death_test_kill_p0() -> void:
+	var main_scene = get_tree().current_scene
+	if main_scene and "_players" in main_scene and main_scene._players.size() > 0:
+		var p0 = main_scene._players[0]
+		if is_instance_valid(p0) and not p0.dead:
+			NetworkLogger.info("[QA_TEST] Host: Inflicting lethal damage to Player 0 (Team Wipe)...", "CoopAnything")
+			var args = TakeDamageArgs.new(0)
+			p0.take_damage(999, args)
+			call_deferred("capture_screen", "death_02_all_players_died")
+	
+	# t = 3.5s after wipe: Click End Run / Cancel on RetryWave to transition to coop_end_run.tscn
+	var t3 = get_tree().create_timer(3.5)
+	t3.connect("timeout", self, "_death_test_advance_to_end_run")
+
+func _death_test_advance_to_end_run() -> void:
+	var main_scene = get_tree().current_scene
+	if main_scene and "_retry_wave" in main_scene:
+		var rw = main_scene._retry_wave
+		if rw and rw.has_method("_on_CancelButton_pressed"):
+			NetworkLogger.info("[QA_TEST] Host: Advancing RetryWave popup to EndRun screen...", "CoopAnything")
+			rw._on_CancelButton_pressed()
+
 puppet func rpc_receive_wave_snapshot(snapshot: Dictionary) -> void:
 	emit_signal("snapshot_received", snapshot)
 
@@ -531,13 +653,10 @@ remotesync func rpc_enemy_died(net_id: int) -> void:
 			enemy.die()
 		network_enemies.erase(net_id)
 
-remote func rpc_client_dealt_damage(net_id: int, damage: int) -> void:
-	if is_host() and network_enemies.has(net_id):
-		var enemy = network_enemies[net_id]
-		if is_instance_valid(enemy) and not enemy.dead:
-			var args = TakeDamageArgs.new(1)
-			args.enemy_killed_by_player = true
-			enemy.take_damage(damage, args)
+remote func rpc_client_dealt_damage(_net_id: int, _damage: int) -> void:
+	# Deprecated: Host is strictly authoritative over all weapon attacks and enemy HP calculations.
+	# Left as a no-op handler to prevent errors if a legacy/stale packet is received.
+	pass
 
 # ----------------------------------------------------
 # Shared Currency (Gold & XP) Synchronization
@@ -584,6 +703,8 @@ remotesync func rpc_spawn_ground_gold(item_id: int, gold_val: int, start_x: floa
 
 remotesync func rpc_spawn_ground_consumable(item_id: int, res_path: String, start_x: float, start_y: float, dest_x: float, dest_y: float) -> void:
 	if is_client():
+		if res_path == "" or res_path == "res://":
+			return
 		var main_scene = get_tree().current_scene
 		if main_scene and ("_consumables_container" in main_scene):
 			var data = load(res_path)
@@ -637,6 +758,8 @@ remotesync func rpc_remove_ground_item(item_id: int, is_gold: bool) -> void:
 
 remotesync func rpc_player_received_crate(player_index: int, res_path: String) -> void:
 	if is_client():
+		if res_path == "" or res_path == "res://":
+			return
 		var main_scene = get_tree().current_scene
 		if main_scene and ("_consumables_to_process" in main_scene):
 			var data = load(res_path)
@@ -782,6 +905,9 @@ func start_postwave_test() -> void:
 remotesync func rpc_load_upgrades_scene() -> void:
 	NetworkLogger.info("CoopUpgradesUI: Loading post-wave upgrades scene for all players...", "CoopAnything")
 	_setup_shop_test_rundata()
+	if is_host():
+		var pw_seed = 987654321
+		rpc("rpc_sync_rng_seed", pw_seed)
 	var err = get_tree().change_scene("res://ui/menus/ingame/coop_upgrades_ui.tscn")
 	if err == OK:
 		NetworkLogger.success("CoopUpgradesUI scene loaded successfully!", "CoopAnything")
@@ -1122,5 +1248,6 @@ remotesync func rpc_all_ready_advance_wave(next_wave: int = -1) -> void:
 			RunData.current_wave = next_wave
 		else:
 			RunData.current_wave += 1
-		var _err = get_tree().change_scene(MenuData.game_scene)
+		var target_scene = MenuData.game_scene if (MenuData and MenuData.game_scene != "" and MenuData.game_scene != "res://") else "res://main.tscn"
+		var _err = get_tree().change_scene(target_scene)
 	call_deferred("capture_screen", "12_wave_advance_success")

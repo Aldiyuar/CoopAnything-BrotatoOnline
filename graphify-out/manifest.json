@@ -1,8 +1,8 @@
 {
   "mods-unpacked/CoopAnything-BrotatoOnline/manifest.json": {
-    "mtime": 1792885760.5348854,
-    "seen": 1792925729.3680012,
-    "ast_hash": "789e3f7f2b689106026486e6969e73d0",
+    "mtime": 1793154631.9483652,
+    "seen": 1793233901.625237,
+    "ast_hash": "db01c3d82586c89913d8647f9b9d842e",
     "semantic_hash": ""
   },
   "tools/build_mod.py": {
@@ -11,58 +11,52 @@
     "ast_hash": "a858ebc778bbdfdd75c5e0783990ef4d",
     "semantic_hash": ""
   },
-  "tools/interactive_playtest.py": {
-    "mtime": 1792891230.478739,
-    "seen": 1792925729.3680148,
-    "ast_hash": "4c79fc3953e9098d2f8ec654115f92d7",
-    "semantic_hash": ""
-  },
-  "tools/live_test_and_monitor.py": {
-    "mtime": 1792890877.7341988,
-    "seen": 1792925729.3680174,
-    "ast_hash": "fcd42a8e16f01799a76d313526c27959",
-    "semantic_hash": ""
-  },
-  "tools/multi_instance_test.py": {
-    "mtime": 1792886112.5102372,
-    "seen": 1792925729.3680198,
-    "ast_hash": "d12bb4650c23dc59b82b7d119aa62f8d",
-    "semantic_hash": ""
-  },
   "tools/real_game_arena_test.py": {
-    "mtime": 1792892345.6145072,
-    "seen": 1792925729.368022,
-    "ast_hash": "98c9eb7d2975a2ac0fce99970ca33f14",
+    "mtime": 1793154832.435794,
+    "seen": 1793233901.625255,
+    "ast_hash": "8150e45118bb0e6f3c01dde11b47f57a",
     "semantic_hash": ""
   },
   "tools/real_game_postwave_test.py": {
-    "mtime": 1792897297.571608,
-    "seen": 1792925729.3680243,
-    "ast_hash": "d83535d70531dfa051843d6cfdf02a59",
+    "mtime": 1793154839.720875,
+    "seen": 1793233901.625261,
+    "ast_hash": "84877e32a9813161c66898e541b46551",
     "semantic_hash": ""
   },
-  "tools/real_game_shop_test.py": {
-    "mtime": 1792893120.8143017,
-    "seen": 1792925729.3680263,
-    "ast_hash": "f0215361430b8d74e6c275e63dd9229b",
+  "tools/build_full_graph.py": {
+    "mtime": 1793112173.1126447,
+    "seen": 1793233901.625245,
+    "ast_hash": "0bb834b03843c53f85c4e68da1fbb690",
     "semantic_hash": ""
   },
-  "tools/screen_helper.py": {
-    "mtime": 1792891185.6121864,
-    "seen": 1792925729.3680282,
-    "ast_hash": "c80b35c793e192f083008c074bd8eacb",
+  "tools/real_game_death_test.py": {
+    "mtime": 1793223762.0525508,
+    "seen": 1793233901.625258,
+    "ast_hash": "98150b82e78b9086b8e020151e87b278",
     "semantic_hash": ""
   },
-  "tools/smoke_test.py": {
-    "mtime": 1792886007.4989243,
-    "seen": 1792925729.3680298,
-    "ast_hash": "369d73174ba256fef0b821d3b9588517",
+  "MODLOG.md": {
+    "mtime": 1793224729.4893515,
+    "seen": 1793233901.6252632,
+    "ast_hash": "a122e5be8227e99fbcb684d4e73ebd11",
     "semantic_hash": ""
   },
-  "tools/watch_logs.py": {
-    "mtime": 1792924730.2078993,
-    "seen": 1792925729.3680317,
-    "ast_hash": "4017dd66ccdae127c296d69667992d57",
+  "PROMPT_FOR_AI_TESTER.md": {
+    "mtime": 1793150072.494237,
+    "seen": 1793233901.6252654,
+    "ast_hash": "cbd33e0d5e17a4bb3d051331b9e39fba",
+    "semantic_hash": ""
+  },
+  "PROMPT_FOR_EXTERNAL_AI_REVIEW.md": {
+    "mtime": 1793154710.0170128,
+    "seen": 1793233901.6252677,
+    "ast_hash": "67c434caea9292bad8f7f07a74f067e4",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1793151413.5927002,
+    "seen": 1793233901.6252697,
+    "ast_hash": "a555383f6e76570256b3a6c488658d0d",
     "semantic_hash": ""
   }
 }

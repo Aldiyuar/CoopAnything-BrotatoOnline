@@ -17,6 +17,7 @@ func _init() -> void:
 	ModLoaderMod.install_script_extension("res://mods-unpacked/CoopAnything-BrotatoOnline/extensions/ui/menus/shop/coop_shop.gd")
 	ModLoaderMod.install_script_extension("res://mods-unpacked/CoopAnything-BrotatoOnline/extensions/ui/menus/ingame/upgrades_ui.gd")
 	ModLoaderMod.install_script_extension("res://mods-unpacked/CoopAnything-BrotatoOnline/extensions/ui/menus/ingame/pause_menu.gd")
+	ModLoaderMod.install_script_extension("res://mods-unpacked/CoopAnything-BrotatoOnline/extensions/ui/menus/ingame/retry_wave.gd")
 
 func _ready() -> void:
 	if ProgressData:

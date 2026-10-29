@@ -43,15 +43,26 @@ func _physics_process(delta: float) -> void:
 			var p_batch = []
 			for i in range(_players.size()):
 				var p = _players[i]
-				if is_instance_valid(p) and not p.dead:
+				if is_instance_valid(p):
+					var is_dead = p.dead or p.current_stats.health <= 0
+					var cur_hp = 0 if is_dead else int(p.current_stats.health)
 					p_batch.append([
 						i,
 						int(p.global_position.x),
 						int(p.global_position.y),
-						int(p.current_stats.health)
+						cur_hp,
+						1 if is_dead else 0
 					])
 			if p_batch.size() > 0:
 				net.rpc_unreliable("rpc_sync_player_positions", p_batch)
+
+func _on_player_died(p_player: Player, args: Entity.DieArgs) -> void:
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online():
+		if net.is_host():
+			NetworkLogger.info("Host: Player %d died! Broadcasting death to all peers..." % p_player.player_index, "CoopAnything")
+			net.rpc("rpc_player_died", p_player.player_index)
+	._on_player_died(p_player, args)
 
 func _on_EntitySpawner_enemy_spawned(enemy: Enemy) -> void:
 	._on_EntitySpawner_enemy_spawned(enemy)
@@ -137,10 +148,10 @@ func _on_enemy_took_damage(
 	is_one_shot: bool
 ) -> void:
 	._on_enemy_took_damage(enemy, value, knockback_direction, is_crit, is_dodge, is_protected, armor_did_something, args, hit_type, is_one_shot)
-	var net = get_node_or_null("/root/NetworkManager")
-	if net and net.is_online() and net.is_client():
-		if enemy.has_meta("net_id"):
-			net.rpc_id(1, "rpc_client_dealt_damage", enemy.get_meta("net_id"), value)
+	# Combat is strictly Host-Authoritative.
+	# Weapons of all players are simulated directly on the Host, and authoritative enemy HP
+	# is replicated to clients via rpc_sync_enemy_batch (20 Hz).
+	# Clients do NOT send rpc_client_dealt_damage to prevent double/triple damage application.
 
 func on_gold_changed(new_value: int, player_index: int) -> void:
 	.on_gold_changed(new_value, player_index)
@@ -255,7 +266,9 @@ func spawn_consumables(unit: Unit) -> void:
 				consumable.set_meta("net_item_id", item_id)
 				net.ground_items[item_id] = consumable
 
-				net.rpc("rpc_spawn_ground_consumable", item_id, consumable_to_spawn.resource_path, pos.x, pos.y, push_back_destination.x, push_back_destination.y)
+				var c_path = _get_consumable_res_path(consumable_to_spawn)
+				if c_path != "":
+					net.rpc("rpc_spawn_ground_consumable", item_id, c_path, pos.x, pos.y, push_back_destination.x, push_back_destination.y)
 			return
 
 	.spawn_consumables(unit)
@@ -334,7 +347,9 @@ func _apply_host_consumable(consumable: Node, player_index: int) -> void:
 		_things_to_process_player_containers[player_index].consumables.add_element(consumable_data)
 		var net = get_node_or_null("/root/NetworkManager")
 		if net and net.is_host():
-			net.rpc("rpc_player_received_crate", player_index, consumable_data.resource_path)
+			var c_path = _get_consumable_res_path(consumable_data)
+			if c_path != "":
+				net.rpc("rpc_player_received_crate", player_index, c_path)
 
 	if player_index < _players.size():
 		_players[player_index].on_consumable_picked_up(consumable_data)
@@ -345,6 +360,30 @@ func _apply_host_consumable(consumable: Node, player_index: int) -> void:
 
 	RunData.apply_item_effects(consumable_data, player_index)
 	_sync_currencies()
+
+func _get_consumable_res_path(consumable_data: Resource) -> String:
+	if not consumable_data:
+		return ""
+	if consumable_data.resource_path != "" and consumable_data.resource_path != "res://":
+		return consumable_data.resource_path
+	var my_id = consumable_data.get("my_id")
+	if my_id:
+		match my_id:
+			"consumable_item_box":
+				return "res://items/consumables/item_box/item_box_data.tres"
+			"consumable_fruit":
+				return "res://items/consumables/fruit/fruit_data.tres"
+			"consumable_legendary_item_box":
+				return "res://items/consumables/legendary_item_box/legendary_item_box_data.tres"
+			_:
+				var item_service = get_node_or_null("/root/ItemService")
+				if item_service:
+					var all_c = item_service.get("consumables")
+					if all_c is Array:
+						for c in all_c:
+							if c.get("my_id") == my_id and c.resource_path != "":
+								return c.resource_path
+	return ""
 
 func on_levelled_up(player_index: int) -> void:
 	.on_levelled_up(player_index)
@@ -358,8 +397,14 @@ func clean_up_room() -> void:
 	if net and net.is_online():
 		net.network_enemies.clear()
 		net.ground_items.clear()
+		if net.is_host():
+			var postwave_seed = (net.current_match_seed + RunData.current_wave * 104729) % 1000000000 + 1
+			net.rpc("rpc_sync_rng_seed", postwave_seed)
 
 func _change_scene(path: String) -> void:
+	if path == "" or path == "res://":
+		NetworkLogger.warn("main: _change_scene called with invalid path: '%s'" % path, "CoopAnything")
+		return
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online():
 		if net.is_host():

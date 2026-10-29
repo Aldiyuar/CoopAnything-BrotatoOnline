@@ -66,6 +66,28 @@ func set_player_ready_ui(player_index: int, is_ready: bool) -> void:
 			checkmark.hide()
 	NetworkLogger.info("CoopShop: UI checkmark for player %d set to: %s" % [player_index + 1, str(is_ready)], "CoopAnything")
 
+func _on_RerollButton_pressed(player_index: int) -> void:
+	var net = get_node_or_null("/root/NetworkManager")
+	if not net or not net.is_online():
+		._on_RerollButton_pressed(player_index)
+		return
+	
+	if net.is_client():
+		if player_index == net.my_player_index:
+			_on_client_reroll_pressed()
+		return
+	
+	# Host: execute native reroll then sync authoritative items to all peers
+	._on_RerollButton_pressed(player_index)
+	var gold_after = RunData.get_player_gold(player_index)
+	var serialized_items = []
+	var locked_count = 0
+	if _shop_items.size() > player_index:
+		serialized_items = net._serialize_shop_items(_shop_items[player_index])
+	if RunData.has_method("get_player_locked_shop_items"):
+		locked_count = RunData.get_player_locked_shop_items(player_index).size()
+	net.rpc("rpc_confirm_shop_reroll", player_index, gold_after, serialized_items, locked_count)
+
 func advance_to_next_wave(next_wave: int = -1) -> void:
 	NetworkLogger.success("CoopShop: Advancing to next wave...", "CoopAnything")
 	for p in range(RunData.get_player_count()):
@@ -102,7 +124,8 @@ func advance_to_next_wave(next_wave: int = -1) -> void:
 		RunData.current_wave += 1 - wave_reset_count
 
 	NetworkLogger.info("CoopShop: Wave set to %d. Loading game_scene..." % RunData.current_wave, "CoopAnything")
-	var _error = get_tree().change_scene(MenuData.game_scene)
+	var target_scene = MenuData.game_scene if (MenuData and MenuData.game_scene != "" and MenuData.game_scene != "res://") else "res://main.tscn"
+	var _error = get_tree().change_scene(target_scene)
 
 func _setup_coop_shop_network() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
@@ -116,40 +139,45 @@ func _setup_coop_shop_network() -> void:
 		if net.shop_ready_states.get(p, false):
 			set_player_ready_ui(p, true)
 	
-	var container2 = get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer2")
-	if not container2:
-		container2 = get_node_or_null("%CoopShopPlayerContainer2")
-	if container2:
-		# Hook RerollButton for Player 2
-		var reroll_btn = container2.get_node_or_null("%RerollButton")
-		if not reroll_btn:
-			reroll_btn = container2.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/HBoxContainer/RerollButton")
+	if net.is_host():
+		var all_shops = {}
+		for p in range(RunData.get_player_count()):
+			if p < _shop_items.size():
+				all_shops[p] = net._serialize_shop_items(_shop_items[p])
+		net.cached_initial_shop_items = all_shops
+		net.rpc("rpc_sync_initial_shop_items", all_shops)
+	elif net.is_client():
+		if net.cached_initial_shop_items.size() > 0:
+			net.rpc_sync_initial_shop_items(net.cached_initial_shop_items)
+	
+	var target_player = net.my_player_index
+	var container = _get_coop_player_container(target_player) if target_player < CoopService.UI_MAX_PLAYER_COUNT else null
+	if container:
+		# Hook RerollButton for local player
+		var reroll_btn = _get_reroll_button(target_player)
 		if reroll_btn and not reroll_btn.is_connected("pressed", self, "_on_client_reroll_pressed"):
 			reroll_btn.connect("pressed", self, "_on_client_reroll_pressed")
 			
-		# Hook BuyButtons on the 4 ShopItems for Player 2
-		var items_vbox = container2.get_node_or_null("%ShopItemsContainer")
-		if not items_vbox:
-			items_vbox = container2.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
-		if items_vbox:
-			var slot = 0
-			for child in items_vbox.get_children():
-				if child is Control and child.has_method("_on_BuyButton_pressed"):
-					var buy_btn = child.get_node_or_null("%BuyButton")
+		# Hook BuyButtons on the ShopItems for local player
+		var items_container = _get_shop_items_container(target_player)
+		if items_container:
+			for slot in range(items_container._shop_items.size()):
+				var item = items_container.get_shop_item_node(slot)
+				if item:
+					var buy_btn = item.get_node_or_null("%BuyButton")
 					if not buy_btn:
-						buy_btn = child.get_node_or_null("PanelContainer/MarginContainer/VBoxContainer/BuyButton")
+						buy_btn = item.get_node_or_null("PanelContainer/MarginContainer/VBoxContainer/BuyButton")
 					if buy_btn and not buy_btn.is_connected("pressed", self, "_on_client_buy_pressed"):
 						buy_btn.connect("pressed", self, "_on_client_buy_pressed", [slot])
-					slot += 1
 
 func _on_client_buy_pressed(slot_idx: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
-		NetworkLogger.info("Client: Shop BUY clicked for slot %d, sending RPC to host..." % slot_idx, "CoopAnything")
-		net.rpc_id(1, "rpc_request_shop_buy", 1, slot_idx)
+		NetworkLogger.info("Client: Shop BUY clicked for player %d slot %d, sending RPC to host..." % [net.my_player_index, slot_idx], "CoopAnything")
+		net.rpc_id(1, "rpc_request_shop_buy", net.my_player_index, slot_idx)
 
 func _on_client_reroll_pressed() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
-		NetworkLogger.info("Client: Shop REROLL clicked, sending RPC to host...", "CoopAnything")
-		net.rpc_id(1, "rpc_request_shop_reroll", 1)
+		NetworkLogger.info("Client: Shop REROLL clicked for player %d, sending RPC to host..." % net.my_player_index, "CoopAnything")
+		net.rpc_id(1, "rpc_request_shop_reroll", net.my_player_index)
