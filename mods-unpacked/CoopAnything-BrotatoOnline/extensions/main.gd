@@ -25,20 +25,24 @@ func _physics_process(delta: float) -> void:
 		_sync_timer += delta
 		if _sync_timer >= 0.05: # 20 Hz
 			_sync_timer = 0.0
-			var batch = []
+			var flat_batch := PoolIntArray()
+			var count_in_chunk: int = 0
 			for net_id in net.network_enemies.keys():
 				var entity = net.network_enemies[net_id]
 				if is_instance_valid(entity) and not entity.dead:
-					batch.append([
-						net_id,
-						int(entity.global_position.x),
-						int(entity.global_position.y),
-						int(entity.current_stats.health)
-					])
+					flat_batch.append(net_id)
+					flat_batch.append(int(entity.global_position.x))
+					flat_batch.append(int(entity.global_position.y))
+					flat_batch.append(int(entity.current_stats.health))
+					count_in_chunk += 1
+					if count_in_chunk >= 60:
+						net.rpc_unreliable("rpc_sync_enemy_batch_flat", flat_batch)
+						flat_batch = PoolIntArray()
+						count_in_chunk = 0
 				else:
 					net.network_enemies.erase(net_id)
-			if batch.size() > 0:
-				net.rpc_unreliable("rpc_sync_enemy_batch", batch)
+			if flat_batch.size() > 0:
+				net.rpc_unreliable("rpc_sync_enemy_batch_flat", flat_batch)
 			
 			# Broadcast authoritative player positions & health (20 Hz)
 			var p_batch = []

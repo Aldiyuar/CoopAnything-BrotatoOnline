@@ -15,7 +15,8 @@ func get_movement() -> Vector2:
 		if _last_sent_movement != Vector2.ZERO:
 			_last_sent_movement = Vector2.ZERO
 			if _net_mgr.is_client():
-				_net_mgr.rpc_unreliable_id(1, "rpc_send_player_input", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+				_net_mgr.client_input_seq += 1
+				_net_mgr.rpc_unreliable_id(1, "rpc_send_player_input", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, _net_mgr.client_input_seq)
 			elif _net_mgr.is_host():
 				_net_mgr.rpc_unreliable("rpc_broadcast_host_input", 0.0, 0.0, 0.0, 0.0)
 		return Vector2.ZERO
@@ -42,7 +43,8 @@ func get_movement() -> Vector2:
 			var my_pos = Vector2.ZERO
 			if _parent and is_instance_valid(_parent):
 				my_pos = _parent.global_position
-			_net_mgr.rpc_unreliable_id(1, "rpc_send_player_input", local_movement.x, local_movement.y, 0.0, 0.0, my_pos.x, my_pos.y)
+			_net_mgr.client_input_seq += 1
+			_net_mgr.rpc_unreliable_id(1, "rpc_send_player_input", local_movement.x, local_movement.y, 0.0, 0.0, my_pos.x, my_pos.y, _net_mgr.client_input_seq)
 	# If we are Host, broadcast our local input to all peers
 	elif _net_mgr.is_host():
 		if local_movement != _last_sent_movement or local_movement.length_squared() > 0:

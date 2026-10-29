@@ -170,7 +170,7 @@ func _setup_coop_shop_network() -> void:
 	var container = _get_coop_player_container(target_player) if target_player < CoopService.UI_MAX_PLAYER_COUNT else null
 	if container:
 		# Note: RerollButton is handled natively via overridden _on_RerollButton_pressed
-		# Hook BuyButtons on the ShopItems for local player
+		# Hook BuyButtons and LockButtons on the ShopItems for local player
 		var items_container = _get_shop_items_container(target_player)
 		if items_container:
 			for slot in range(items_container._shop_items.size()):
@@ -181,12 +181,26 @@ func _setup_coop_shop_network() -> void:
 						buy_btn = item.get_node_or_null("PanelContainer/MarginContainer/VBoxContainer/BuyButton")
 					if buy_btn and not buy_btn.is_connected("pressed", self, "_on_client_buy_pressed"):
 						buy_btn.connect("pressed", self, "_on_client_buy_pressed", [slot])
+					
+					var lock_btn = item.get_node_or_null("%LockButton")
+					if not lock_btn:
+						lock_btn = item.get_node_or_null("PanelContainer/MarginContainer/VBoxContainer/LockButton")
+					if not lock_btn and "_lock_button" in item:
+						lock_btn = item._lock_button
+					if lock_btn and not lock_btn.is_connected("toggled", self, "_on_client_lock_toggled"):
+						lock_btn.connect("toggled", self, "_on_client_lock_toggled", [slot])
 
 func _on_client_buy_pressed(slot_idx: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
 		NetworkLogger.info("Client: Shop BUY clicked for player %d slot %d, sending RPC to host..." % [net.my_player_index, slot_idx], "CoopAnything")
 		net.rpc_id(1, "rpc_request_shop_buy", net.my_player_index, slot_idx)
+
+func _on_client_lock_toggled(button_pressed: bool, slot_idx: int) -> void:
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_client():
+		NetworkLogger.info("Client: Shop LOCK toggled for slot %d (%s), sending RPC to host..." % [slot_idx, str(button_pressed)], "CoopAnything")
+		net.rpc_id(1, "rpc_request_shop_lock", net.my_player_index, slot_idx, button_pressed)
 
 func _on_client_reroll_pressed() -> void:
 	var net = get_node_or_null("/root/NetworkManager")

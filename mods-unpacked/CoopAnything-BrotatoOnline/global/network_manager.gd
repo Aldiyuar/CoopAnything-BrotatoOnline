@@ -34,6 +34,8 @@ var network_item_counter: int = 5000
 
 var current_match_seed: int = 123456789
 var cached_initial_shop_items: Dictionary = {}
+var client_input_seq: int = 0
+var last_received_input_seq: Dictionary = {} # player_index -> int
 
 var _enet_peer: NetworkedMultiplayerENet = null
 var _accumulated_time: float = 0.0
@@ -238,6 +240,8 @@ func close_session() -> void:
 	shop_ready_states.clear()
 	ground_items.clear()
 	network_enemies.clear()
+	client_input_seq = 0
+	last_received_input_seq.clear()
 	emit_signal("role_changed", role)
 
 func is_online() -> bool:
@@ -399,10 +403,15 @@ remote func rpc_broadcast_host_input(movement_x: float, movement_y: float, aim_x
 	player_inputs[0] = {"movement": movement, "aim": aim}
 	emit_signal("input_updated", 0, movement, aim)
 
-remote func rpc_send_player_input(movement_x: float, movement_y: float, aim_x: float, aim_y: float, pos_x: float = 0.0, pos_y: float = 0.0) -> void:
+remote func rpc_send_player_input(movement_x: float, movement_y: float, aim_x: float, aim_y: float, pos_x: float = 0.0, pos_y: float = 0.0, seq: int = 0) -> void:
 	var sender_id = get_tree().get_rpc_sender_id()
 	if peer_to_player_index.has(sender_id):
 		var p_idx = peer_to_player_index[sender_id]
+		if seq > 0:
+			var last_seq = last_received_input_seq.get(p_idx, 0)
+			if seq < last_seq and (last_seq - seq) < 100000:
+				return
+			last_received_input_seq[p_idx] = seq
 		var movement = Vector2(movement_x, movement_y)
 		var aim = Vector2(aim_x, aim_y)
 		var old_input = player_inputs.get(p_idx, {})
@@ -627,7 +636,12 @@ func _death_test_kill_p1() -> void:
 		if is_instance_valid(p1) and not p1.dead:
 			NetworkLogger.info("[QA_TEST] Host: Inflicting lethal damage to Player 1...", "CoopAnything")
 			var args = TakeDamageArgs.new(0)
-			p1.take_damage(999, args)
+			args.dodgeable = false
+			args.bypass_invincibility = true
+			p1.take_damage(9999, args)
+			if is_instance_valid(p1) and not p1.dead:
+				p1.current_stats.health = 0
+				p1.die()
 			call_deferred("capture_screen", "death_01_client_player_died")
 	
 	# t = 11.0s: Inflict lethal damage on Player 0 (Host) -> leads to team wipe and Game Over
@@ -641,7 +655,12 @@ func _death_test_kill_p0() -> void:
 		if is_instance_valid(p0) and not p0.dead:
 			NetworkLogger.info("[QA_TEST] Host: Inflicting lethal damage to Player 0 (Team Wipe)...", "CoopAnything")
 			var args = TakeDamageArgs.new(0)
-			p0.take_damage(999, args)
+			args.dodgeable = false
+			args.bypass_invincibility = true
+			p0.take_damage(9999, args)
+			if is_instance_valid(p0) and not p0.dead:
+				p0.current_stats.health = 0
+				p0.die()
 			call_deferred("capture_screen", "death_02_all_players_died")
 	
 	# t = 3.5s after wipe: Click End Run / Cancel on RetryWave to transition to coop_end_run.tscn
@@ -697,6 +716,30 @@ remotesync func rpc_spawn_network_neutral(net_id: int, scene_path: String, pos_x
 				neutral.global_position = Vector2(pos_x, pos_y)
 				neutral.set_meta("net_target_pos", neutral.global_position)
 				NetworkLogger.info("Client: Spawned shared tree %d at (%.0f, %.0f)" % [net_id, pos_x, pos_y], "CoopAnything")
+
+puppet func rpc_sync_enemy_batch_flat(flat_batch: PoolIntArray) -> void:
+	if is_client():
+		var total = flat_batch.size()
+		var i = 0
+		while i + 3 < total:
+			var net_id: int = flat_batch[i]
+			var pos_x: int = flat_batch[i + 1]
+			var pos_y: int = flat_batch[i + 2]
+			var hp: int = flat_batch[i + 3]
+			i += 4
+			if network_enemies.has(net_id):
+				var enemy = network_enemies[net_id]
+				if is_instance_valid(enemy) and not enemy.dead:
+					var target_pos = Vector2(pos_x, pos_y)
+					var dist = enemy.global_position.distance_to(target_pos)
+					if dist > 250.0:
+						enemy.global_position = target_pos
+					enemy.set_meta("net_target_pos", target_pos)
+					enemy.current_stats.health = hp
+					if hp <= 0:
+						enemy.set_meta("host_killed", true)
+						enemy.die()
+						network_enemies.erase(net_id)
 
 puppet func rpc_sync_enemy_batch(batch: Array) -> void:
 	if is_client():
@@ -1233,6 +1276,25 @@ remotesync func rpc_confirm_shop_buy(player_index: int, slot_idx: int, updated_g
 					if item and item.has_method("deactivate"):
 						item.deactivate()
 	call_deferred("capture_screen", "08_shop_after_client_buy")
+
+remote func rpc_request_shop_lock(player_index: int, slot_idx: int, is_locked: bool) -> void:
+	if not is_host():
+		return
+	NetworkLogger.info("Host: Received shop LOCK request from player %d for slot %d (%s)" % [player_index, slot_idx, str(is_locked)], "CoopAnything")
+	var shop = get_tree().current_scene
+	if shop:
+		var container = shop.get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer" + str(player_index + 1))
+		if container:
+			var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
+			if items_vbox:
+				var item = null
+				if items_vbox.has_method("get_shop_item_node"):
+					item = items_vbox.get_shop_item_node(slot_idx)
+				elif slot_idx < items_vbox.get_child_count():
+					item = items_vbox.get_child(slot_idx)
+				if item and item.has_method("change_lock_status"):
+					item.change_lock_status(is_locked)
+					NetworkLogger.success("Host: Synchronized lock status for player %d slot %d: %s" % [player_index, slot_idx, str(is_locked)], "CoopAnything")
 
 remote func rpc_request_shop_reroll(player_index: int) -> void:
 	if not is_host():
