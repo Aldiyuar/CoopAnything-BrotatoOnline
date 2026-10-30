@@ -365,7 +365,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	NetworkLogger.success("[QA_TEST] Client: Successfully connected to host server!", "CoopAnything")
-	rpc_unreliable_id(1, "rpc_send_player_input", 1.0, 0.5, 0.0, 0.0)
+	rpc_unreliable_id(1, "rpc_send_player_input", 0.0, 0.0, 0.0, 0.0)
 
 func _on_connection_failed() -> void:
 	NetworkLogger.error("[QA_TEST] Connection failed!", "CoopAnything")
@@ -449,6 +449,7 @@ remotesync func rpc_player_died(player_index: int) -> void:
 		if main_scene and "_players" in main_scene and player_index < main_scene._players.size():
 			var p = main_scene._players[player_index]
 			if is_instance_valid(p) and not p.dead:
+				p.set_meta("host_killed_player", true)
 				p.current_stats.health = 0
 				p.die()
 				NetworkLogger.success("Client: Player %d successfully transitioned to death state" % player_index, "CoopAnything")
@@ -467,6 +468,7 @@ puppet func rpc_sync_player_positions(p_batch: Array) -> void:
 					if is_instance_valid(p):
 						if is_dead:
 							if not p.dead:
+								p.set_meta("host_killed_player", true)
 								p.current_stats.health = 0
 								p.die()
 								NetworkLogger.info("Client: Player %d died (synced via position batch)" % p_idx, "CoopAnything")
@@ -518,7 +520,14 @@ func start_coop_match() -> void:
 	NetworkLogger.info("Host: Launching 2-player co-op arena match...", "CoopAnything")
 	rpc("rpc_start_match")
 
+func _is_cli_test_mode() -> bool:
+	for arg in OS.get_cmdline_args():
+		if arg.begins_with("--coop-"):
+			return true
+	return false
+
 remotesync func rpc_start_match() -> void:
+	synthetic_movement = Vector2.ZERO
 	NetworkLogger.info("Starting arena match for connected players!", "CoopAnything")
 	_setup_match_rundata()
 	if is_host():
@@ -531,7 +540,8 @@ remotesync func rpc_start_match() -> void:
 	var err = get_tree().change_scene(target_scene)
 	if err == OK:
 		NetworkLogger.success("Arena scene (%s) loaded successfully!" % target_scene, "CoopAnything")
-		call_deferred("_schedule_arena_actions")
+		if _is_cli_test_mode():
+			call_deferred("_schedule_arena_actions")
 	else:
 		NetworkLogger.error("Failed to load game scene: %d" % err, "CoopAnything")
 
@@ -729,6 +739,9 @@ remotesync func rpc_spawn_network_neutral(net_id: int, scene_path: String, pos_x
 
 puppet func rpc_sync_enemy_batch_flat(flat_batch: PoolIntArray) -> void:
 	if is_client():
+		var main_scene = get_tree().current_scene
+		if not main_scene or main_scene.get("_cleaning_up") == true:
+			return
 		var total = flat_batch.size()
 		var i = 0
 		while i + 3 < total:
@@ -753,6 +766,9 @@ puppet func rpc_sync_enemy_batch_flat(flat_batch: PoolIntArray) -> void:
 
 puppet func rpc_sync_enemy_batch(batch: Array) -> void:
 	if is_client():
+		var main_scene = get_tree().current_scene
+		if not main_scene or main_scene.get("_cleaning_up") == true:
+			return
 		for item in batch:
 			var net_id: int = item[0]
 			if network_enemies.has(net_id):
@@ -902,11 +918,15 @@ remotesync func rpc_remove_ground_item(item_id: int, is_gold: bool) -> void:
 			var main_scene = get_tree().current_scene
 			if main_scene:
 				if is_gold and "_active_golds" in main_scene:
+					var was_active = main_scene._active_golds.has(item)
 					main_scene._active_golds.erase(item)
-					main_scene.add_node_to_pool(item, main_scene._gold_pool_id)
+					if was_active:
+						main_scene.add_node_to_pool(item, main_scene._gold_pool_id)
 				elif not is_gold and "_consumables" in main_scene:
+					var was_active = main_scene._consumables.has(item)
 					main_scene._consumables.erase(item)
-					main_scene.add_node_to_pool(item, main_scene._consumable_pool_id)
+					if was_active:
+						main_scene.add_node_to_pool(item, main_scene._consumable_pool_id)
 
 remotesync func rpc_player_received_crate(player_index: int, res_path: String) -> void:
 	if is_client():
@@ -1261,7 +1281,7 @@ remote func rpc_request_shop_buy(player_index: int, slot_idx: int) -> void:
 					item._on_BuyButton_pressed()
 					var gold_after = RunData.get_player_gold(player_index)
 					NetworkLogger.success("Host: Executed BUY for player %d on slot %d (Gold: %d -> %d)" % [player_index, slot_idx, gold_before, gold_after], "CoopAnything")
-					rpc("rpc_confirm_shop_buy", player_index, slot_idx, gold_after, item_res_path)
+					# Note: item._on_BuyButton_pressed triggers shop.on_shop_item_bought(), which already broadcasts rpc_confirm_shop_buy.
 
 remotesync func rpc_confirm_shop_buy(player_index: int, slot_idx: int, updated_gold: int, item_res_path: String = "") -> void:
 	NetworkLogger.info("Confirmed shop buy for player %d (slot %d, remaining gold: %d)" % [player_index, slot_idx, updated_gold], "CoopAnything")
@@ -1297,18 +1317,33 @@ remote func rpc_request_shop_lock(player_index: int, slot_idx: int, is_locked: b
 	NetworkLogger.info("Host: Received shop LOCK request from player %d for slot %d (%s)" % [player_index, slot_idx, str(is_locked)], "CoopAnything")
 	var shop = get_tree().current_scene
 	if shop:
-		var container = shop.get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer" + str(player_index + 1))
-		if container:
-			var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
-			if items_vbox:
-				var item = null
-				if items_vbox.has_method("get_shop_item_node"):
-					item = items_vbox.get_shop_item_node(slot_idx)
-				elif slot_idx < items_vbox.get_child_count():
-					item = items_vbox.get_child(slot_idx)
-				if item and item.has_method("change_lock_status"):
-					item.change_lock_status(is_locked)
-					NetworkLogger.success("Host: Synchronized lock status for player %d slot %d: %s" % [player_index, slot_idx, str(is_locked)], "CoopAnything")
+		var cont = shop._get_shop_items_container(player_index) if shop.has_method("_get_shop_items_container") else null
+		if cont and cont.has_method("get_shop_item_node"):
+			var item = cont.get_shop_item_node(slot_idx)
+			if item and item.has_method("change_lock_status"):
+				if "_updating_shop_ui" in shop:
+					shop._updating_shop_ui = true
+				item.change_lock_status(is_locked)
+				if "_updating_shop_ui" in shop:
+					shop._updating_shop_ui = false
+				NetworkLogger.success("Host: Synchronized lock status for player %d slot %d: %s" % [player_index, slot_idx, str(is_locked)], "CoopAnything")
+	rpc("rpc_sync_shop_lock", player_index, slot_idx, is_locked)
+
+remotesync func rpc_sync_shop_lock(player_index: int, slot_idx: int, is_locked: bool) -> void:
+	if player_index == my_player_index:
+		return
+	var shop = get_tree().current_scene
+	if shop:
+		var cont = shop._get_shop_items_container(player_index) if shop.has_method("_get_shop_items_container") else null
+		if cont and cont.has_method("get_shop_item_node"):
+			var item = cont.get_shop_item_node(slot_idx)
+			if item and item.has_method("change_lock_status"):
+				if "_updating_shop_ui" in shop:
+					shop._updating_shop_ui = true
+				item.change_lock_status(is_locked)
+				if "_updating_shop_ui" in shop:
+					shop._updating_shop_ui = false
+				NetworkLogger.info("Peer: Synced lock status for player %d slot %d: %s" % [player_index, slot_idx, str(is_locked)], "CoopAnything")
 
 remote func rpc_request_shop_reroll(player_index: int) -> void:
 	if not is_host():
@@ -1489,7 +1524,11 @@ remote func rpc_request_weapon_combine(player_index: int, weapon_res_path: Strin
 		var weapons = RunData.get_player_weapons(player_index)
 		for w in weapons:
 			if get_resource_path(w) == weapon_res_path:
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = true
 				shop._on_item_combine_button_pressed(w, player_index)
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = false
 				break
 	rpc("rpc_sync_weapon_combine", player_index, weapon_res_path)
 
@@ -1500,7 +1539,11 @@ remotesync func rpc_sync_weapon_combine(player_index: int, weapon_res_path: Stri
 			var weapons = RunData.get_player_weapons(player_index)
 			for w in weapons:
 				if get_resource_path(w) == weapon_res_path:
+					if "_applying_remote_weapon_op" in shop:
+						shop._applying_remote_weapon_op = true
 					shop._on_item_combine_button_pressed(w, player_index)
+					if "_applying_remote_weapon_op" in shop:
+						shop._applying_remote_weapon_op = false
 					break
 
 remote func rpc_request_weapon_discard(player_index: int, weapon_res_path: String) -> void:
@@ -1511,7 +1554,11 @@ remote func rpc_request_weapon_discard(player_index: int, weapon_res_path: Strin
 		var weapons = RunData.get_player_weapons(player_index)
 		for w in weapons:
 			if get_resource_path(w) == weapon_res_path:
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = true
 				shop._on_item_discard_button_pressed(w, player_index)
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = false
 				break
 	var gold_after = RunData.get_player_gold(player_index)
 	rpc("rpc_sync_weapon_discard", player_index, weapon_res_path, gold_after)
@@ -1523,7 +1570,11 @@ remotesync func rpc_sync_weapon_discard(player_index: int, weapon_res_path: Stri
 			var weapons = RunData.get_player_weapons(player_index)
 			for w in weapons:
 				if get_resource_path(w) == weapon_res_path:
+					if "_applying_remote_weapon_op" in shop:
+						shop._applying_remote_weapon_op = true
 					shop._on_item_discard_button_pressed(w, player_index)
+					if "_applying_remote_weapon_op" in shop:
+						shop._applying_remote_weapon_op = false
 					break
 		if RunData and player_index < RunData.players_data.size():
 			RunData.players_data[player_index].gold = gold_after

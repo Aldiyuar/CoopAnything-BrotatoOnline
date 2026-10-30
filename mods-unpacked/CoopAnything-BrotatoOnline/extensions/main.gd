@@ -23,6 +23,8 @@ func _physics_process(delta: float) -> void:
 	._physics_process(delta)
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online() and net.is_host():
+		if _cleaning_up:
+			return
 		_sync_timer += delta
 		if _sync_timer >= 0.05: # 20 Hz
 			_sync_timer = 0.0
@@ -94,6 +96,12 @@ func _on_player_died(p_player: Player, args: Entity.DieArgs) -> void:
 		if net.is_host():
 			NetworkLogger.info("Host: Player %d died! Broadcasting death to all peers..." % p_player.player_index, "CoopAnything")
 			net.rpc("rpc_player_died", p_player.player_index)
+		elif net.is_client():
+			if not p_player.get_meta("host_killed_player", false):
+				NetworkLogger.warn("Client: Suppressing unconfirmed local player %d death (Host has authority)" % p_player.player_index, "CoopAnything")
+				p_player.dead = false
+				p_player.current_stats.health = 1
+				return
 	._on_player_died(p_player, args)
 
 func _on_EntitySpawner_enemy_spawned(enemy: Enemy) -> void:

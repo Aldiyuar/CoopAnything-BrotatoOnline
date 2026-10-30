@@ -4,22 +4,27 @@ const NetworkLogger = preload("res://mods-unpacked/CoopAnything-BrotatoOnline/gl
 
 var _reroll_pending: bool = false
 var _updating_shop_ui: bool = false
+var _applying_remote_weapon_op: bool = false
 
 func _on_item_combine_button_pressed(weapon_data: WeaponData, player_index: int) -> void:
-	._on_item_combine_button_pressed(weapon_data, player_index)
 	var net = get_node_or_null("/root/NetworkManager")
-	if net and net.is_online():
-		var w_path = net.get_resource_path(weapon_data) if net.has_method("get_resource_path") else ""
+	var w_path = ""
+	if net and net.has_method("get_resource_path"):
+		w_path = net.get_resource_path(weapon_data)
+	._on_item_combine_button_pressed(weapon_data, player_index)
+	if net and net.is_online() and not _applying_remote_weapon_op:
 		if net.is_client() and player_index == net.my_player_index:
 			net.rpc_id(1, "rpc_request_weapon_combine", player_index, w_path)
 		elif net.is_host():
 			net.rpc("rpc_sync_weapon_combine", player_index, w_path)
 
 func _on_item_discard_button_pressed(weapon_data: WeaponData, player_index: int) -> void:
-	._on_item_discard_button_pressed(weapon_data, player_index)
 	var net = get_node_or_null("/root/NetworkManager")
-	if net and net.is_online():
-		var w_path = net.get_resource_path(weapon_data) if net.has_method("get_resource_path") else ""
+	var w_path = ""
+	if net and net.has_method("get_resource_path"):
+		w_path = net.get_resource_path(weapon_data)
+	._on_item_discard_button_pressed(weapon_data, player_index)
+	if net and net.is_online() and not _applying_remote_weapon_op:
 		if net.is_client() and player_index == net.my_player_index:
 			net.rpc_id(1, "rpc_request_weapon_discard", player_index, w_path)
 		elif net.is_host():
@@ -142,23 +147,23 @@ func advance_to_next_wave(next_wave: int = -1) -> void:
 						var effects = RunData.get_player_effects(p)
 						effects[Keys.used_item_locking_hash] = 1
 
+	var wave_reset_count: int = 0
+	for p in RunData.get_player_count():
+		var effects = RunData.get_player_effects(p)
+		var hourglass_count = effects[Keys.item_hourglass_hash] if effects.has(Keys.item_hourglass_hash) else 0
+		if hourglass_count > 0:
+			wave_reset_count += hourglass_count
+			var source_item = RunData.get_player_item(Keys.item_hourglass_hash, p)
+			RunData.remove_item(source_item, p)
+
+		var extra_elite_spawn_chance = effects[Keys.extra_elite_next_wave_chance_hash] if effects.has(Keys.extra_elite_next_wave_chance_hash) else 0
+		if Utils.get_chance_success(float(extra_elite_spawn_chance) / 100):
+			var rand_elite_id = ItemService.get_random_elite_id_hash_from_zone(ZoneService.current_zone.my_id)
+			effects[Keys.extra_enemies_next_wave_hash].append(["res://zones/common/elite/group_elite.tres", 1, rand_elite_id])
+
 	if next_wave > 0:
 		RunData.current_wave = next_wave
 	else:
-		var wave_reset_count: = 0
-		for p in RunData.get_player_count():
-			var effects = RunData.get_player_effects(p)
-			var hourglass_count = effects[Keys.item_hourglass_hash] if effects.has(Keys.item_hourglass_hash) else 0
-			if hourglass_count > 0:
-				wave_reset_count += hourglass_count
-				var source_item = RunData.get_player_item(Keys.item_hourglass_hash, p)
-				RunData.remove_item(source_item, p)
-
-			var extra_elite_spawn_chance = effects[Keys.extra_elite_next_wave_chance_hash] if effects.has(Keys.extra_elite_next_wave_chance_hash) else 0
-			if Utils.get_chance_success(float(extra_elite_spawn_chance) / 100):
-				var rand_elite_id = ItemService.get_random_elite_id_hash_from_zone(ZoneService.current_zone.my_id)
-				effects[Keys.extra_enemies_next_wave_hash].append(["res://zones/common/elite/group_elite.tres", 1, rand_elite_id])
-
 		RunData.current_wave += 1 - wave_reset_count
 
 	NetworkLogger.info("CoopShop: Wave set to %d. Loading game_scene..." % RunData.current_wave, "CoopAnything")
@@ -209,8 +214,8 @@ func _setup_coop_shop_network() -> void:
 						lock_btn = item.get_node_or_null("PanelContainer/MarginContainer/VBoxContainer/LockButton")
 					if not lock_btn and "_lock_button" in item:
 						lock_btn = item._lock_button
-					if lock_btn and not lock_btn.is_connected("toggled", self, "_on_client_lock_toggled"):
-						lock_btn.connect("toggled", self, "_on_client_lock_toggled", [slot])
+					if lock_btn and not lock_btn.is_connected("toggled", self, "_on_local_lock_toggled"):
+						lock_btn.connect("toggled", self, "_on_local_lock_toggled", [slot])
 
 func _on_client_buy_pressed(slot_idx: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
@@ -218,13 +223,17 @@ func _on_client_buy_pressed(slot_idx: int) -> void:
 		NetworkLogger.info("Client: Shop BUY clicked for player %d slot %d, sending RPC to host..." % [net.my_player_index, slot_idx], "CoopAnything")
 		net.rpc_id(1, "rpc_request_shop_buy", net.my_player_index, slot_idx)
 
-func _on_client_lock_toggled(button_pressed: bool, slot_idx: int) -> void:
+func _on_local_lock_toggled(button_pressed: bool, slot_idx: int) -> void:
 	if _updating_shop_ui:
 		return
 	var net = get_node_or_null("/root/NetworkManager")
-	if net and net.is_client():
-		NetworkLogger.info("Client: Shop LOCK toggled for slot %d (%s), sending RPC to host..." % [slot_idx, str(button_pressed)], "CoopAnything")
-		net.rpc_id(1, "rpc_request_shop_lock", net.my_player_index, slot_idx, button_pressed)
+	if net and net.is_online():
+		if net.is_client():
+			NetworkLogger.info("Client: Shop LOCK toggled for slot %d (%s), sending RPC to host..." % [slot_idx, str(button_pressed)], "CoopAnything")
+			net.rpc_id(1, "rpc_request_shop_lock", net.my_player_index, slot_idx, button_pressed)
+		elif net.is_host():
+			NetworkLogger.info("Host: Shop LOCK toggled for slot %d (%s), broadcasting..." % [slot_idx, str(button_pressed)], "CoopAnything")
+			net.rpc("rpc_sync_shop_lock", net.my_player_index, slot_idx, button_pressed)
 
 func _on_client_reroll_pressed() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
