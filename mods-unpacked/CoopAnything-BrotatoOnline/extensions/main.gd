@@ -15,9 +15,24 @@ func _ready() -> void:
 			if _wave_manager and _entity_spawner:
 				if _wave_manager.is_connected("group_spawn_timing_reached", _entity_spawner, "on_group_spawn_timing_reached"):
 					_wave_manager.disconnect("group_spawn_timing_reached", _entity_spawner, "on_group_spawn_timing_reached")
+			call_deferred("_setup_client_remote_players_pickup")
 			NetworkLogger.success("Client: Disabled local wave manager enemy spawning (Host Authoritative)", "CoopAnything")
 		elif net.is_host():
 			NetworkLogger.success("Host: Managing authoritative shared enemies & currency", "CoopAnything")
+
+func _setup_client_remote_players_pickup() -> void:
+	var net = get_node_or_null("/root/NetworkManager")
+	if not net or not net.is_client():
+		return
+	for i in range(_players.size()):
+		if i != net.my_player_index:
+			var p = _players[i]
+			if is_instance_valid(p):
+				if "_item_attract_area" in p and p._item_attract_area:
+					p._item_attract_area.monitoring = false
+				if "_item_pickup_area" in p and p._item_pickup_area:
+					p._item_pickup_area.monitoring = false
+	NetworkLogger.info("Client: Disabled pickup & attract areas for remote player puppets", "CoopAnything")
 
 func _physics_process(delta: float) -> void:
 	._physics_process(delta)
@@ -26,8 +41,8 @@ func _physics_process(delta: float) -> void:
 		if _cleaning_up:
 			return
 		_sync_timer += delta
-		if _sync_timer >= 0.05: # 20 Hz
-			_sync_timer = 0.0
+		if _sync_timer >= 0.048: # Stable 20 Hz
+			_sync_timer = fmod(_sync_timer, 0.05)
 			var flat_batch := PoolIntArray()
 			var count_in_chunk: int = 0
 			for net_id in net.network_enemies.keys():
@@ -39,13 +54,15 @@ func _physics_process(delta: float) -> void:
 					flat_batch.append(int(entity.current_stats.health))
 					count_in_chunk += 1
 					if count_in_chunk >= 60:
-						net.rpc_unreliable("rpc_sync_enemy_batch_flat", flat_batch)
+						net.host_enemy_seq += 1
+						net.rpc_unreliable("rpc_sync_enemy_batch_flat", net.host_enemy_seq, flat_batch)
 						flat_batch = PoolIntArray()
 						count_in_chunk = 0
 				else:
 					net.network_enemies.erase(net_id)
 			if flat_batch.size() > 0:
-				net.rpc_unreliable("rpc_sync_enemy_batch_flat", flat_batch)
+				net.host_enemy_seq += 1
+				net.rpc_unreliable("rpc_sync_enemy_batch_flat", net.host_enemy_seq, flat_batch)
 			
 			# Broadcast authoritative player positions & health (20 Hz)
 			var p_batch = []
@@ -53,7 +70,7 @@ func _physics_process(delta: float) -> void:
 				var p = _players[i]
 				if is_instance_valid(p):
 					var is_dead = p.dead or p.current_stats.health <= 0
-					var cur_hp = 0 if is_dead else int(p.current_stats.health)
+					var cur_hp = 0 if is_dead else int(ceil(p.current_stats.health))
 					p_batch.append([
 						i,
 						int(p.global_position.x),
@@ -237,6 +254,10 @@ func spawn_gold(value: float, pos: Vector2, spread: int) -> void:
 						min(gold_boosted.scale.x + Gold.INITIAL_VALUE * 0.05, Gold.MAX_SIZE), 
 						min(gold_boosted.scale.y + Gold.INITIAL_VALUE * 0.05, Gold.MAX_SIZE)
 					)
+					if gold_boosted.has_meta("net_item_id"):
+						var boosted_id = gold_boosted.get_meta("net_item_id")
+						if boosted_id != -1:
+							net.rpc("rpc_boost_ground_gold", boosted_id, gold_boosted.value, gold_boosted.scale.x)
 					continue
 
 				var gold = get_node_from_pool(_gold_pool_id, _materials_container)
@@ -467,7 +488,8 @@ func on_upgrades_options_processed() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online():
 		if net.is_client():
-			NetworkLogger.info("Client: All local upgrades chosen, waiting for Host scene transition...", "CoopAnything")
+			NetworkLogger.info("Client: All local upgrades chosen, notifying Host...", "CoopAnything")
+			net.rpc_id(1, "rpc_client_finished_all_upgrades", net.my_player_index)
 			return
 		elif net.is_host():
 			var target_scene = MenuData.shop_scene if (MenuData and MenuData.shop_scene != "") else "res://ui/menus/shop/coop_shop.tscn"

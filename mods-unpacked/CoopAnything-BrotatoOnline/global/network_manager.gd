@@ -36,6 +36,8 @@ var current_match_seed: int = 123456789
 var cached_initial_shop_items: Dictionary = {}
 var client_input_seq: int = 0
 var last_received_input_seq: Dictionary = {} # player_index -> int
+var host_enemy_seq: int = 0
+var last_received_enemy_seq: int = 0
 
 var _enet_peer: NetworkedMultiplayerENet = null
 var _accumulated_time: float = 0.0
@@ -437,10 +439,8 @@ remote func rpc_send_player_input(movement_x: float, movement_y: float, aim_x: f
 				if is_instance_valid(p) and not p.dead:
 					var client_pos = Vector2(pos_x, pos_y)
 					var dist = p.global_position.distance_to(client_pos)
-					if dist > 300.0:
-						p.global_position = client_pos
-					elif dist > 150.0:
-						p.global_position = p.global_position.linear_interpolate(client_pos, 0.15)
+					if dist > 80.0 and dist < 250.0:
+						p.global_position = p.global_position.linear_interpolate(client_pos, 0.1)
 
 remotesync func rpc_player_died(player_index: int) -> void:
 	if is_client():
@@ -462,7 +462,7 @@ puppet func rpc_sync_player_positions(p_batch: Array) -> void:
 				var p_idx: int = item[0]
 				var target_pos = Vector2(item[1], item[2])
 				var hp: int = item[3]
-				var is_dead: bool = (item.size() > 4 and item[4] == 1) or hp <= 0
+				var is_dead: bool = (item.size() > 4 and item[4] == 1)
 				if p_idx < main_scene._players.size():
 					var p = main_scene._players[p_idx]
 					if is_instance_valid(p):
@@ -716,6 +716,8 @@ remotesync func rpc_spawn_network_enemy(net_id: int, scene_path: String, pos_x: 
 				network_enemies[net_id] = enemy
 				enemy.global_position = Vector2(pos_x, pos_y)
 				enemy.set_meta("net_target_pos", enemy.global_position)
+				if "_can_move" in enemy:
+					enemy._can_move = false
 				enemy.current_stats.health = hp
 				enemy.max_stats.health = hp
 				NetworkLogger.info("Client: Spawned shared enemy %d (%s) at (%.0f, %.0f)" % [net_id, scene_path.get_file(), pos_x, pos_y], "CoopAnything")
@@ -737,8 +739,11 @@ remotesync func rpc_spawn_network_neutral(net_id: int, scene_path: String, pos_x
 				neutral.set_meta("net_target_pos", neutral.global_position)
 				NetworkLogger.info("Client: Spawned shared tree %d at (%.0f, %.0f)" % [net_id, pos_x, pos_y], "CoopAnything")
 
-puppet func rpc_sync_enemy_batch_flat(flat_batch: PoolIntArray) -> void:
+puppet func rpc_sync_enemy_batch_flat(seq: int, flat_batch: PoolIntArray) -> void:
 	if is_client():
+		if seq < last_received_enemy_seq and (last_received_enemy_seq - seq) < 100000:
+			return
+		last_received_enemy_seq = seq
 		var main_scene = get_tree().current_scene
 		if not main_scene or main_scene.get("_cleaning_up") == true:
 			return
@@ -927,6 +932,13 @@ remotesync func rpc_remove_ground_item(item_id: int, is_gold: bool) -> void:
 					main_scene._consumables.erase(item)
 					if was_active:
 						main_scene.add_node_to_pool(item, main_scene._consumable_pool_id)
+
+remotesync func rpc_boost_ground_gold(item_id: int, new_value: int, new_scale: float) -> void:
+	if is_client() and ground_items.has(item_id):
+		var gold = ground_items[item_id]
+		if is_instance_valid(gold) and not gold.already_picked_up:
+			gold.value = new_value
+			gold.scale = Vector2(new_scale, new_scale)
 
 remotesync func rpc_player_received_crate(player_index: int, res_path: String) -> void:
 	if is_client():
@@ -1309,6 +1321,8 @@ remotesync func rpc_confirm_shop_buy(player_index: int, slot_idx: int, updated_g
 						item = items_vbox.get_child(slot_idx)
 					if item and item.has_method("deactivate"):
 						item.deactivate()
+			if "_buy_pending_slots" in shop:
+				shop._buy_pending_slots.erase(slot_idx)
 	call_deferred("capture_screen", "08_shop_after_client_buy")
 
 remote func rpc_request_shop_lock(player_index: int, slot_idx: int, is_locked: bool) -> void:
@@ -1364,8 +1378,11 @@ remotesync func rpc_confirm_shop_reroll(player_index: int, updated_gold: int, se
 		RunData.emit_signal("gold_changed", updated_gold, player_index)
 	if is_client():
 		var shop = get_tree().current_scene
-		if shop and ("_reroll_pending" in shop):
-			shop._reroll_pending = false
+		if shop:
+			if "_reroll_pending" in shop:
+				shop._reroll_pending = false
+			if "_buy_pending_slots" in shop:
+				shop._buy_pending_slots.clear()
 		if serialized_items.size() > 0 and shop and ("_shop_items" in shop) and player_index < shop._shop_items.size():
 			shop._shop_items[player_index] = _deserialize_shop_items(serialized_items)
 			var cont = shop._get_shop_items_container(player_index) if shop.has_method("_get_shop_items_container") else null
@@ -1478,7 +1495,49 @@ remote func rpc_request_crate_discard(player_index: int) -> void:
 
 remotesync func rpc_confirm_crate_discard(player_index: int) -> void:
 	NetworkLogger.info("Player %d crate discard confirmed" % player_index, "CoopAnything")
+	var scene = get_tree().current_scene
+	var upgrades_ui = _find_upgrades_ui(scene)
+	if upgrades_ui and is_client() and player_index == my_player_index:
+		if upgrades_ui.get("_crate_choice_pending") == true:
+			upgrades_ui._crate_choice_pending = false
+		else:
+			var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+			if not container:
+				container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+			if not container:
+				container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+			if container and container.has_method("_on_DiscardButton_pressed"):
+				container._on_DiscardButton_pressed()
 	call_deferred("capture_screen", "11_crate_item_discarded")
+
+remote func rpc_client_finished_all_upgrades(player_index: int) -> void:
+	if not is_host():
+		return
+	NetworkLogger.info("Host: Received all-upgrades-finished notification from player %d" % player_index, "CoopAnything")
+	var scene = get_tree().current_scene
+	var up_ui = _find_upgrades_ui(scene)
+	if up_ui:
+		if "_consumables_to_process" in up_ui and player_index < up_ui._consumables_to_process.size():
+			up_ui._consumables_to_process[player_index].clear()
+		if "_upgrades_to_process" in up_ui and player_index < up_ui._upgrades_to_process.size():
+			up_ui._upgrades_to_process[player_index].clear()
+		if "_extra_items_to_process" in up_ui and player_index < up_ui._extra_items_to_process.size():
+			up_ui._extra_items_to_process[player_index].clear()
+		if "_player_is_choosing" in up_ui and player_index < up_ui._player_is_choosing.size():
+			up_ui._player_is_choosing[player_index] = false
+		var cont = up_ui._get_player_container(player_index) if up_ui.has_method("_get_player_container") else null
+		if cont and cont.has_method("finish"):
+			cont.finish()
+		var anyone_choosing = false
+		if "_player_is_choosing" in up_ui:
+			for p in range(up_ui._player_is_choosing.size()):
+				if is_player_slot_active(p) and up_ui._player_is_choosing[p]:
+					anyone_choosing = true
+					break
+		if not anyone_choosing:
+			if up_ui.has_method("_show_next_player_options"):
+				if not up_ui._show_next_player_options():
+					up_ui.emit_signal("options_processed")
 
 func _find_upgrades_ui(scene: Node) -> Node:
 	if not scene:
@@ -1516,66 +1575,90 @@ remotesync func rpc_sync_crate_handled(player_index: int, item_res_path: String,
 			RunData.emit_signal("gold_changed", updated_gold, player_index)
 		NetworkLogger.info("Client: Synced remote player %d crate item (%s, taken: %s)" % [player_index, item_res_path.get_file(), str(taken)], "CoopAnything")
 
-remote func rpc_request_weapon_combine(player_index: int, weapon_res_path: String) -> void:
+remote func rpc_request_weapon_combine(player_index: int, weapon_idx: int = -1, weapon_res_path: String = "") -> void:
 	if not is_host():
 		return
 	var shop = get_tree().current_scene
 	if shop and shop.has_method("_on_item_combine_button_pressed"):
 		var weapons = RunData.get_player_weapons(player_index)
-		for w in weapons:
-			if get_resource_path(w) == weapon_res_path:
-				if "_applying_remote_weapon_op" in shop:
-					shop._applying_remote_weapon_op = true
-				shop._on_item_combine_button_pressed(w, player_index)
-				if "_applying_remote_weapon_op" in shop:
-					shop._applying_remote_weapon_op = false
-				break
-	rpc("rpc_sync_weapon_combine", player_index, weapon_res_path)
+		var target_weapon = null
+		if weapon_idx >= 0 and weapon_idx < weapons.size():
+			target_weapon = weapons[weapon_idx]
+		elif weapon_res_path != "":
+			for w in weapons:
+				if get_resource_path(w) == weapon_res_path:
+					target_weapon = w
+					break
+		if target_weapon != null:
+			if "_applying_remote_weapon_op" in shop:
+				shop._applying_remote_weapon_op = true
+			shop._on_item_combine_button_pressed(target_weapon, player_index)
+			if "_applying_remote_weapon_op" in shop:
+				shop._applying_remote_weapon_op = false
+	rpc("rpc_sync_weapon_combine", player_index, weapon_idx, weapon_res_path)
 
-remotesync func rpc_sync_weapon_combine(player_index: int, weapon_res_path: String) -> void:
+remotesync func rpc_sync_weapon_combine(player_index: int, weapon_idx: int = -1, weapon_res_path: String = "") -> void:
 	if is_client() and player_index != my_player_index:
 		var shop = get_tree().current_scene
 		if shop and shop.has_method("_on_item_combine_button_pressed"):
 			var weapons = RunData.get_player_weapons(player_index)
-			for w in weapons:
-				if get_resource_path(w) == weapon_res_path:
-					if "_applying_remote_weapon_op" in shop:
-						shop._applying_remote_weapon_op = true
-					shop._on_item_combine_button_pressed(w, player_index)
-					if "_applying_remote_weapon_op" in shop:
-						shop._applying_remote_weapon_op = false
-					break
+			var target_weapon = null
+			if weapon_idx >= 0 and weapon_idx < weapons.size():
+				target_weapon = weapons[weapon_idx]
+			elif weapon_res_path != "":
+				for w in weapons:
+					if get_resource_path(w) == weapon_res_path:
+						target_weapon = w
+						break
+			if target_weapon != null:
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = true
+				shop._on_item_combine_button_pressed(target_weapon, player_index)
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = false
 
-remote func rpc_request_weapon_discard(player_index: int, weapon_res_path: String) -> void:
+remote func rpc_request_weapon_discard(player_index: int, weapon_idx: int = -1, weapon_res_path: String = "") -> void:
 	if not is_host():
 		return
 	var shop = get_tree().current_scene
 	if shop and shop.has_method("_on_item_discard_button_pressed"):
 		var weapons = RunData.get_player_weapons(player_index)
-		for w in weapons:
-			if get_resource_path(w) == weapon_res_path:
-				if "_applying_remote_weapon_op" in shop:
-					shop._applying_remote_weapon_op = true
-				shop._on_item_discard_button_pressed(w, player_index)
-				if "_applying_remote_weapon_op" in shop:
-					shop._applying_remote_weapon_op = false
-				break
+		var target_weapon = null
+		if weapon_idx >= 0 and weapon_idx < weapons.size():
+			target_weapon = weapons[weapon_idx]
+		elif weapon_res_path != "":
+			for w in weapons:
+				if get_resource_path(w) == weapon_res_path:
+					target_weapon = w
+					break
+		if target_weapon != null:
+			if "_applying_remote_weapon_op" in shop:
+				shop._applying_remote_weapon_op = true
+			shop._on_item_discard_button_pressed(target_weapon, player_index)
+			if "_applying_remote_weapon_op" in shop:
+				shop._applying_remote_weapon_op = false
 	var gold_after = RunData.get_player_gold(player_index)
-	rpc("rpc_sync_weapon_discard", player_index, weapon_res_path, gold_after)
+	rpc("rpc_sync_weapon_discard", player_index, weapon_idx, weapon_res_path, gold_after)
 
-remotesync func rpc_sync_weapon_discard(player_index: int, weapon_res_path: String, gold_after: int) -> void:
+remotesync func rpc_sync_weapon_discard(player_index: int, weapon_idx: int = -1, weapon_res_path: String = "", gold_after: int = 0) -> void:
 	if is_client() and player_index != my_player_index:
 		var shop = get_tree().current_scene
 		if shop and shop.has_method("_on_item_discard_button_pressed"):
 			var weapons = RunData.get_player_weapons(player_index)
-			for w in weapons:
-				if get_resource_path(w) == weapon_res_path:
-					if "_applying_remote_weapon_op" in shop:
-						shop._applying_remote_weapon_op = true
-					shop._on_item_discard_button_pressed(w, player_index)
-					if "_applying_remote_weapon_op" in shop:
-						shop._applying_remote_weapon_op = false
-					break
+			var target_weapon = null
+			if weapon_idx >= 0 and weapon_idx < weapons.size():
+				target_weapon = weapons[weapon_idx]
+			elif weapon_res_path != "":
+				for w in weapons:
+					if get_resource_path(w) == weapon_res_path:
+						target_weapon = w
+						break
+			if target_weapon != null:
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = true
+				shop._on_item_discard_button_pressed(target_weapon, player_index)
+				if "_applying_remote_weapon_op" in shop:
+					shop._applying_remote_weapon_op = false
 		if RunData and player_index < RunData.players_data.size():
 			RunData.players_data[player_index].gold = gold_after
 			RunData.emit_signal("gold_changed", gold_after, player_index)

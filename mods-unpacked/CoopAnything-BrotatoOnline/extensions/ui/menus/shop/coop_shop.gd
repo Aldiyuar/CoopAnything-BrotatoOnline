@@ -5,31 +5,38 @@ const NetworkLogger = preload("res://mods-unpacked/CoopAnything-BrotatoOnline/gl
 var _reroll_pending: bool = false
 var _updating_shop_ui: bool = false
 var _applying_remote_weapon_op: bool = false
+var _buy_pending_slots: Dictionary = {}
 
 func _on_item_combine_button_pressed(weapon_data: WeaponData, player_index: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	var w_path = ""
+	var weapon_idx = -1
+	if RunData and player_index < RunData.players_data.size():
+		weapon_idx = RunData.get_player_weapons(player_index).find(weapon_data)
 	if net and net.has_method("get_resource_path"):
 		w_path = net.get_resource_path(weapon_data)
 	._on_item_combine_button_pressed(weapon_data, player_index)
 	if net and net.is_online() and not _applying_remote_weapon_op:
 		if net.is_client() and player_index == net.my_player_index:
-			net.rpc_id(1, "rpc_request_weapon_combine", player_index, w_path)
+			net.rpc_id(1, "rpc_request_weapon_combine", player_index, weapon_idx, w_path)
 		elif net.is_host():
-			net.rpc("rpc_sync_weapon_combine", player_index, w_path)
+			net.rpc("rpc_sync_weapon_combine", player_index, weapon_idx, w_path)
 
 func _on_item_discard_button_pressed(weapon_data: WeaponData, player_index: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	var w_path = ""
+	var weapon_idx = -1
+	if RunData and player_index < RunData.players_data.size():
+		weapon_idx = RunData.get_player_weapons(player_index).find(weapon_data)
 	if net and net.has_method("get_resource_path"):
 		w_path = net.get_resource_path(weapon_data)
 	._on_item_discard_button_pressed(weapon_data, player_index)
 	if net and net.is_online() and not _applying_remote_weapon_op:
 		if net.is_client() and player_index == net.my_player_index:
-			net.rpc_id(1, "rpc_request_weapon_discard", player_index, w_path)
+			net.rpc_id(1, "rpc_request_weapon_discard", player_index, weapon_idx, w_path)
 		elif net.is_host():
 			var gold_after = RunData.get_player_gold(player_index)
-			net.rpc("rpc_sync_weapon_discard", player_index, w_path, gold_after)
+			net.rpc("rpc_sync_weapon_discard", player_index, weapon_idx, w_path, gold_after)
 
 func _enter_tree() -> void:
 	NetworkLogger.info("CoopShop: _enter_tree called (players in RunData: %d)" % RunData.get_player_count(), "CoopAnything")
@@ -153,8 +160,10 @@ func advance_to_next_wave(next_wave: int = -1) -> void:
 		var hourglass_count = effects[Keys.item_hourglass_hash] if effects.has(Keys.item_hourglass_hash) else 0
 		if hourglass_count > 0:
 			wave_reset_count += hourglass_count
-			var source_item = RunData.get_player_item(Keys.item_hourglass_hash, p)
-			RunData.remove_item(source_item, p)
+			for _h in range(hourglass_count):
+				var source_item = RunData.get_player_item(Keys.item_hourglass_hash, p)
+				if source_item != null:
+					RunData.remove_item(source_item, p)
 
 		var extra_elite_spawn_chance = effects[Keys.extra_elite_next_wave_chance_hash] if effects.has(Keys.extra_elite_next_wave_chance_hash) else 0
 		if Utils.get_chance_success(float(extra_elite_spawn_chance) / 100):
@@ -220,6 +229,9 @@ func _setup_coop_shop_network() -> void:
 func _on_client_buy_pressed(slot_idx: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
+		if _buy_pending_slots.get(slot_idx, false) or _reroll_pending:
+			return
+		_buy_pending_slots[slot_idx] = true
 		NetworkLogger.info("Client: Shop BUY clicked for player %d slot %d, sending RPC to host..." % [net.my_player_index, slot_idx], "CoopAnything")
 		net.rpc_id(1, "rpc_request_shop_buy", net.my_player_index, slot_idx)
 

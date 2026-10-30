@@ -94,6 +94,9 @@ func _on_client_crate_taken() -> void:
 func _on_client_crate_discarded() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
+		if _crate_choice_pending:
+			return
+		_crate_choice_pending = true
 		NetworkLogger.info("Client: Clicked crate DISCARD for player %d, sending RPC to host..." % net.my_player_index, "CoopAnything")
 		net.rpc_id(1, "rpc_request_crate_discard", net.my_player_index)
 
