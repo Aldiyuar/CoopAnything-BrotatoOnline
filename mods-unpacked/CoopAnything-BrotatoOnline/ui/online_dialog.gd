@@ -109,9 +109,9 @@ func _on_host_pressed():
 	var res = net.host_game(port)
 	if res == OK:
 		RunData.set_coop_run(true)
-		status_label.text = "Hosting active! Entering character select..."
-		var timer = get_tree().create_timer(0.5)
-		timer.connect("timeout", self, "_go_to_character_select")
+		status_label.text = "Hosting on UDP %d. Waiting for Player 2 to connect..." % port
+		host_btn.disabled = true
+		join_btn.disabled = true
 
 func _on_join_pressed():
 	var net = get_node_or_null("/root/NetworkManager")
@@ -133,9 +133,9 @@ func _on_join_pressed():
 	var res = net.join_game(raw_ip, port)
 	if res == OK:
 		RunData.set_coop_run(true)
-		status_label.text = "Connected! Entering character select..."
-		var timer = get_tree().create_timer(0.5)
-		timer.connect("timeout", self, "_go_to_character_select")
+		status_label.text = "Connected! Waiting for Host to start match..."
+		host_btn.disabled = true
+		join_btn.disabled = true
 	else:
 		status_label.text = "Failed to connect (Error: %d)" % res
 
@@ -149,6 +149,12 @@ func _on_close_pressed():
 func _on_role_changed(new_role):
 	if new_role == NetworkConstants.PeerRole.SOLO:
 		status_label.text = "Status: Disconnected"
+		host_btn.disabled = false
+		join_btn.disabled = false
 
 func _on_peer_joined(peer_id, player_idx):
-	status_label.text = "Player %d connected (Peer %d)!" % [player_idx + 1, peer_id]
+	status_label.text = "Player %d connected (Peer %d)! Starting match in 1s..." % [player_idx + 1, peer_id]
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_host():
+		var timer = get_tree().create_timer(1.0)
+		timer.connect("timeout", net, "start_coop_match")

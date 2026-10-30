@@ -96,3 +96,26 @@ func _on_client_crate_discarded() -> void:
 	if net and net.is_client():
 		NetworkLogger.info("Client: Clicked crate DISCARD for player %d, sending RPC to host..." % net.my_player_index, "CoopAnything")
 		net.rpc_id(1, "rpc_request_crate_discard", net.my_player_index)
+
+func _on_choose_button_pressed(upgrade_data: UpgradeData, player_index: int) -> void:
+	._on_choose_button_pressed(upgrade_data, player_index)
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online() and net.is_host():
+		var u_path = net.get_resource_path(upgrade_data) if net.has_method("get_resource_path") else ""
+		net.rpc("rpc_sync_upgrade_applied", player_index, u_path)
+
+func _on_take_button_pressed(item_data: ItemParentData, player_index: int) -> void:
+	._on_take_button_pressed(item_data, player_index)
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online() and net.is_host():
+		var i_path = net.get_resource_path(item_data) if net.has_method("get_resource_path") else ""
+		var gold_after = RunData.get_player_gold(player_index)
+		net.rpc("rpc_sync_crate_handled", player_index, i_path, true, gold_after)
+
+func _on_discard_button_pressed(item_data: ItemParentData, player_index: int) -> void:
+	._on_discard_button_pressed(item_data, player_index)
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online() and net.is_host():
+		var i_path = net.get_resource_path(item_data) if net.has_method("get_resource_path") else ""
+		var gold_after = RunData.get_player_gold(player_index)
+		net.rpc("rpc_sync_crate_handled", player_index, i_path, false, gold_after)

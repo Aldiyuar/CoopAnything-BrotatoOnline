@@ -3,6 +3,7 @@ extends "res://main.gd"
 const NetworkLogger = preload("res://mods-unpacked/CoopAnything-BrotatoOnline/global/network_logger.gd")
 
 var _sync_timer: float = 0.0
+var _host_triggered_cleanup: bool = false
 
 func _ready() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
@@ -81,7 +82,7 @@ func _physics_process(delta: float) -> void:
 					p.global_position = p.global_position.linear_interpolate(target, weight)
 		
 		# Smooth 60 FPS interpolation for shared enemies and trees
-		for net_id in net.network_enemies.keys():
+		for net_id in net.network_enemies:
 			var entity = net.network_enemies[net_id]
 			if is_instance_valid(entity) and not entity.dead and entity.has_meta("net_target_pos"):
 				var target = entity.get_meta("net_target_pos")
@@ -337,6 +338,7 @@ func on_gold_picked_up(gold: Node, player_index: int) -> void:
 			return
 		if net.is_client() and player_index != net.my_player_index:
 			return
+		var item_id = gold.get_meta("net_item_id") if gold.has_meta("net_item_id") else -1
 		gold.already_picked_up = true
 		gold.set_meta("net_item_id", -1)
 		_active_golds.erase(gold)
@@ -347,8 +349,6 @@ func on_gold_picked_up(gold: Node, player_index: int) -> void:
 		else:
 			SoundManager.play(Utils.get_rand_element(gold_pickup_sounds), 0, 0.2)
 			
-		var item_id = gold.get_meta("net_item_id") if gold.has_meta("net_item_id") else -1
-		
 		if net.is_client():
 			if item_id != -1:
 				net.ground_items.erase(item_id)
@@ -374,12 +374,11 @@ func on_consumable_picked_up(consumable: Node, player_index: int) -> void:
 			return
 		if net.is_client() and player_index != net.my_player_index:
 			return
+		var item_id = consumable.get_meta("net_item_id") if consumable.has_meta("net_item_id") else -1
 		consumable.already_picked_up = true
 		consumable.set_meta("net_item_id", -1)
 		_consumables.erase(consumable)
 		add_node_to_pool(consumable, _consumable_pool_id)
-		
-		var item_id = consumable.get_meta("net_item_id") if consumable.has_meta("net_item_id") else -1
 		
 		if net.is_client():
 			if item_id != -1:
@@ -469,14 +468,18 @@ func on_upgrades_options_processed() -> void:
 	.on_upgrades_options_processed()
 
 func clean_up_room() -> void:
-	.clean_up_room()
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online():
+		if net.is_client() and not _host_triggered_cleanup:
+			# Prevent client from cleaning up arena early via local timer; wait for host authority
+			return
 		net.network_enemies.clear()
 		net.ground_items.clear()
 		if net.is_host():
 			var postwave_seed = (net.current_match_seed + RunData.current_wave * 104729) % 1000000000 + 1
 			net.rpc("rpc_sync_rng_seed", postwave_seed)
+			net.rpc("rpc_trigger_client_cleanup")
+	.clean_up_room()
 
 func _change_scene(path: String) -> void:
 	if path == "" or path == "res://":

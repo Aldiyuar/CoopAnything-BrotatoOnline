@@ -3,6 +3,28 @@ extends "res://ui/menus/shop/coop_shop.gd"
 const NetworkLogger = preload("res://mods-unpacked/CoopAnything-BrotatoOnline/global/network_logger.gd")
 
 var _reroll_pending: bool = false
+var _updating_shop_ui: bool = false
+
+func _on_item_combine_button_pressed(weapon_data: WeaponData, player_index: int) -> void:
+	._on_item_combine_button_pressed(weapon_data, player_index)
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online():
+		var w_path = net.get_resource_path(weapon_data) if net.has_method("get_resource_path") else ""
+		if net.is_client() and player_index == net.my_player_index:
+			net.rpc_id(1, "rpc_request_weapon_combine", player_index, w_path)
+		elif net.is_host():
+			net.rpc("rpc_sync_weapon_combine", player_index, w_path)
+
+func _on_item_discard_button_pressed(weapon_data: WeaponData, player_index: int) -> void:
+	._on_item_discard_button_pressed(weapon_data, player_index)
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online():
+		var w_path = net.get_resource_path(weapon_data) if net.has_method("get_resource_path") else ""
+		if net.is_client() and player_index == net.my_player_index:
+			net.rpc_id(1, "rpc_request_weapon_discard", player_index, w_path)
+		elif net.is_host():
+			var gold_after = RunData.get_player_gold(player_index)
+			net.rpc("rpc_sync_weapon_discard", player_index, w_path, gold_after)
 
 func _enter_tree() -> void:
 	NetworkLogger.info("CoopShop: _enter_tree called (players in RunData: %d)" % RunData.get_player_count(), "CoopAnything")
@@ -197,6 +219,8 @@ func _on_client_buy_pressed(slot_idx: int) -> void:
 		net.rpc_id(1, "rpc_request_shop_buy", net.my_player_index, slot_idx)
 
 func _on_client_lock_toggled(button_pressed: bool, slot_idx: int) -> void:
+	if _updating_shop_ui:
+		return
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
 		NetworkLogger.info("Client: Shop LOCK toggled for slot %d (%s), sending RPC to host..." % [slot_idx, str(button_pressed)], "CoopAnything")
