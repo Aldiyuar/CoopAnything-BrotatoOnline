@@ -16,6 +16,8 @@ func _ready() -> void:
 				if _wave_manager.is_connected("group_spawn_timing_reached", _entity_spawner, "on_group_spawn_timing_reached"):
 					_wave_manager.disconnect("group_spawn_timing_reached", _entity_spawner, "on_group_spawn_timing_reached")
 			call_deferred("_setup_client_remote_players_pickup")
+			if net.has_method("flush_pending_spawns"):
+				net.call_deferred("flush_pending_spawns", self)
 			NetworkLogger.success("Client: Disabled local wave manager enemy spawning (Host Authoritative)", "CoopAnything")
 		elif net.is_host():
 			NetworkLogger.success("Host: Managing authoritative shared enemies & currency", "CoopAnything")
@@ -43,6 +45,8 @@ func _physics_process(delta: float) -> void:
 		_sync_timer += delta
 		if _sync_timer >= 0.048: # Stable 20 Hz
 			_sync_timer = fmod(_sync_timer, 0.05)
+			net.host_enemy_seq += 1
+			var current_tick_seq: int = net.host_enemy_seq
 			var flat_batch := PoolIntArray()
 			var count_in_chunk: int = 0
 			for net_id in net.network_enemies.keys():
@@ -54,15 +58,13 @@ func _physics_process(delta: float) -> void:
 					flat_batch.append(int(entity.current_stats.health))
 					count_in_chunk += 1
 					if count_in_chunk >= 60:
-						net.host_enemy_seq += 1
-						net.rpc_unreliable("rpc_sync_enemy_batch_flat", net.host_enemy_seq, flat_batch)
+						net.rpc_unreliable("rpc_sync_enemy_batch_flat", current_tick_seq, flat_batch)
 						flat_batch = PoolIntArray()
 						count_in_chunk = 0
 				else:
 					net.network_enemies.erase(net_id)
 			if flat_batch.size() > 0:
-				net.host_enemy_seq += 1
-				net.rpc_unreliable("rpc_sync_enemy_batch_flat", net.host_enemy_seq, flat_batch)
+				net.rpc_unreliable("rpc_sync_enemy_batch_flat", current_tick_seq, flat_batch)
 			
 			# Broadcast authoritative player positions & health (20 Hz)
 			var p_batch = []
@@ -79,7 +81,8 @@ func _physics_process(delta: float) -> void:
 						1 if is_dead else 0
 					])
 			if p_batch.size() > 0:
-				net.rpc_unreliable("rpc_sync_player_positions", p_batch)
+				net.host_player_seq += 1
+				net.rpc_unreliable("rpc_sync_player_positions", p_batch, net.host_player_seq)
 	elif net and net.is_online() and net.is_client():
 		if _entity_spawner:
 			if "queue_to_spawn" in _entity_spawner and _entity_spawner.queue_to_spawn.size() > 0:
@@ -111,6 +114,7 @@ func _on_player_died(p_player: Player, args: Entity.DieArgs) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_online():
 		if net.is_host():
+			net.player_inputs[p_player.player_index] = {"movement": Vector2.ZERO, "aim": Vector2.ZERO}
 			NetworkLogger.info("Host: Player %d died! Broadcasting death to all peers..." % p_player.player_index, "CoopAnything")
 			net.rpc("rpc_player_died", p_player.player_index)
 		elif net.is_client():
@@ -505,6 +509,12 @@ func clean_up_room() -> void:
 			return
 		net.network_enemies.clear()
 		net.ground_items.clear()
+		net.host_enemy_seq = 0
+		net.last_received_enemy_seq = 0
+		net.host_player_seq = 0
+		net.last_received_player_seq = 0
+		if "pending_enemy_spawns" in net:
+			net.pending_enemy_spawns.clear()
 		if net.is_host():
 			var postwave_seed = (net.current_match_seed + RunData.current_wave * 104729) % 1000000000 + 1
 			net.rpc("rpc_sync_rng_seed", postwave_seed)

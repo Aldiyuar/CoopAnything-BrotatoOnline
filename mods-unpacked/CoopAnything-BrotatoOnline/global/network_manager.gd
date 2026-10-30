@@ -38,6 +38,9 @@ var client_input_seq: int = 0
 var last_received_input_seq: Dictionary = {} # player_index -> int
 var host_enemy_seq: int = 0
 var last_received_enemy_seq: int = 0
+var host_player_seq: int = 0
+var last_received_player_seq: int = 0
+var pending_enemy_spawns: Array = [] # [is_neutral, net_id, scene_path, pos_x, pos_y, hp]
 
 var _enet_peer: NetworkedMultiplayerENet = null
 var _accumulated_time: float = 0.0
@@ -244,6 +247,11 @@ func close_session() -> void:
 	network_enemies.clear()
 	client_input_seq = 0
 	last_received_input_seq.clear()
+	host_enemy_seq = 0
+	last_received_enemy_seq = 0
+	host_player_seq = 0
+	last_received_player_seq = 0
+	pending_enemy_spawns.clear()
 	emit_signal("role_changed", role)
 
 func is_online() -> bool:
@@ -439,8 +447,8 @@ remote func rpc_send_player_input(movement_x: float, movement_y: float, aim_x: f
 				if is_instance_valid(p) and not p.dead:
 					var client_pos = Vector2(pos_x, pos_y)
 					var dist = p.global_position.distance_to(client_pos)
-					if dist > 80.0 and dist < 250.0:
-						p.global_position = p.global_position.linear_interpolate(client_pos, 0.1)
+					if dist > 160.0 and dist < 320.0:
+						p.global_position = p.global_position.linear_interpolate(client_pos, 0.05)
 
 remotesync func rpc_player_died(player_index: int) -> void:
 	if is_client():
@@ -454,8 +462,12 @@ remotesync func rpc_player_died(player_index: int) -> void:
 				p.die()
 				NetworkLogger.success("Client: Player %d successfully transitioned to death state" % player_index, "CoopAnything")
 
-puppet func rpc_sync_player_positions(p_batch: Array) -> void:
+puppet func rpc_sync_player_positions(p_batch: Array, seq: int = 0) -> void:
 	if is_client():
+		if seq > 0:
+			if seq < last_received_player_seq and (last_received_player_seq - seq) < 100000:
+				return
+			last_received_player_seq = seq
 		var main_scene = get_tree().current_scene
 		if main_scene and "_players" in main_scene:
 			for item in p_batch:
@@ -701,43 +713,70 @@ puppet func rpc_receive_wave_snapshot(snapshot: Dictionary) -> void:
 # ----------------------------------------------------
 # Enemy & World State Replication (Host Authoritative)
 # ----------------------------------------------------
+func _do_client_spawn_enemy(main_scene: Node, net_id: int, scene_path: String, pos_x: float, pos_y: float, hp: int) -> void:
+	if not main_scene or main_scene.get("_cleaning_up") == true or not main_scene.has_node("EntitySpawner"):
+		return
+	var scene = load(scene_path)
+	if scene:
+		var spawner = main_scene.get_node("EntitySpawner")
+		var args = EntitySpawner.SpawnEntityArgs.new(Vector2(pos_x, pos_y), EntityType.ENEMY)
+		var enemy = spawner.spawn_entity(scene, args)
+		if enemy:
+			enemy.set_meta("net_id", net_id)
+			network_enemies[net_id] = enemy
+			enemy.global_position = Vector2(pos_x, pos_y)
+			enemy.set_meta("net_target_pos", enemy.global_position)
+			if "_can_move" in enemy:
+				enemy._can_move = false
+			enemy.current_stats.health = hp
+			enemy.max_stats.health = hp
+			NetworkLogger.info("Client: Spawned shared enemy %d (%s) at (%.0f, %.0f)" % [net_id, scene_path.get_file(), pos_x, pos_y], "CoopAnything")
+
+func _do_client_spawn_neutral(main_scene: Node, net_id: int, scene_path: String, pos_x: float, pos_y: float) -> void:
+	if not main_scene or main_scene.get("_cleaning_up") == true or not main_scene.has_node("EntitySpawner"):
+		return
+	var scene = load(scene_path)
+	if scene:
+		var spawner = main_scene.get_node("EntitySpawner")
+		var args = EntitySpawner.SpawnEntityArgs.new(Vector2(pos_x, pos_y), EntityType.NEUTRAL)
+		var neutral = spawner.spawn_entity(scene, args)
+		if neutral:
+			neutral.set_meta("net_id", net_id)
+			network_enemies[net_id] = neutral
+			neutral.global_position = Vector2(pos_x, pos_y)
+			neutral.set_meta("net_target_pos", neutral.global_position)
+			NetworkLogger.info("Client: Spawned shared tree %d at (%.0f, %.0f)" % [net_id, pos_x, pos_y], "CoopAnything")
+
 remotesync func rpc_spawn_network_enemy(net_id: int, scene_path: String, pos_x: float, pos_y: float, hp: int) -> void:
 	if is_client():
 		var main_scene = get_tree().current_scene
-		if not main_scene or main_scene.get("_cleaning_up") == true or not main_scene.has_node("EntitySpawner"):
+		if not main_scene or not main_scene.has_node("EntitySpawner"):
+			pending_enemy_spawns.append([false, net_id, scene_path, pos_x, pos_y, hp])
 			return
-		var scene = load(scene_path)
-		if scene:
-			var spawner = main_scene.get_node("EntitySpawner")
-			var args = EntitySpawner.SpawnEntityArgs.new(Vector2(pos_x, pos_y), EntityType.ENEMY)
-			var enemy = spawner.spawn_entity(scene, args)
-			if enemy:
-				enemy.set_meta("net_id", net_id)
-				network_enemies[net_id] = enemy
-				enemy.global_position = Vector2(pos_x, pos_y)
-				enemy.set_meta("net_target_pos", enemy.global_position)
-				if "_can_move" in enemy:
-					enemy._can_move = false
-				enemy.current_stats.health = hp
-				enemy.max_stats.health = hp
-				NetworkLogger.info("Client: Spawned shared enemy %d (%s) at (%.0f, %.0f)" % [net_id, scene_path.get_file(), pos_x, pos_y], "CoopAnything")
+		if main_scene.get("_cleaning_up") == true:
+			return
+		_do_client_spawn_enemy(main_scene, net_id, scene_path, pos_x, pos_y, hp)
 
 remotesync func rpc_spawn_network_neutral(net_id: int, scene_path: String, pos_x: float, pos_y: float) -> void:
 	if is_client():
 		var main_scene = get_tree().current_scene
-		if not main_scene or main_scene.get("_cleaning_up") == true or not main_scene.has_node("EntitySpawner"):
+		if not main_scene or not main_scene.has_node("EntitySpawner"):
+			pending_enemy_spawns.append([true, net_id, scene_path, pos_x, pos_y, 0])
 			return
-		var scene = load(scene_path)
-		if scene:
-			var spawner = main_scene.get_node("EntitySpawner")
-			var args = EntitySpawner.SpawnEntityArgs.new(Vector2(pos_x, pos_y), EntityType.NEUTRAL)
-			var neutral = spawner.spawn_entity(scene, args)
-			if neutral:
-				neutral.set_meta("net_id", net_id)
-				network_enemies[net_id] = neutral
-				neutral.global_position = Vector2(pos_x, pos_y)
-				neutral.set_meta("net_target_pos", neutral.global_position)
-				NetworkLogger.info("Client: Spawned shared tree %d at (%.0f, %.0f)" % [net_id, pos_x, pos_y], "CoopAnything")
+		if main_scene.get("_cleaning_up") == true:
+			return
+		_do_client_spawn_neutral(main_scene, net_id, scene_path, pos_x, pos_y)
+
+func flush_pending_spawns(main_scene: Node) -> void:
+	if not is_client() or pending_enemy_spawns.empty():
+		return
+	var queued = pending_enemy_spawns.duplicate()
+	pending_enemy_spawns.clear()
+	for entry in queued:
+		if not entry[0]:
+			_do_client_spawn_enemy(main_scene, entry[1], entry[2], entry[3], entry[4], entry[5])
+		else:
+			_do_client_spawn_neutral(main_scene, entry[1], entry[2], entry[3], entry[4])
 
 puppet func rpc_sync_enemy_batch_flat(seq: int, flat_batch: PoolIntArray) -> void:
 	if is_client():
@@ -763,7 +802,10 @@ puppet func rpc_sync_enemy_batch_flat(seq: int, flat_batch: PoolIntArray) -> voi
 					if dist > 250.0:
 						enemy.global_position = target_pos
 					enemy.set_meta("net_target_pos", target_pos)
-					enemy.current_stats.health = hp
+					if enemy.current_stats.health != hp:
+						enemy.current_stats.health = hp
+						if enemy.has_signal("health_updated"):
+							enemy.emit_signal("health_updated", enemy, hp, enemy.max_stats.health)
 					if hp <= 0:
 						enemy.set_meta("host_killed", true)
 						enemy.die()
@@ -900,16 +942,22 @@ remotesync func rpc_spawn_ground_consumable(item_id: int, res_path: String, star
 remote func rpc_request_item_pickup(item_id: int, is_gold: bool, player_index: int) -> void:
 	if not is_host():
 		return
+	var sender_id = get_tree().get_rpc_sender_id()
+	if sender_id != 0 and peer_to_player_index.get(sender_id, -1) != player_index:
+		return
+	var main_scene = get_tree().current_scene
+	if not main_scene or main_scene.get("_cleaning_up") == true:
+		return
 	if ground_items.has(item_id):
 		var item = ground_items[item_id]
 		ground_items.erase(item_id)
 		if is_instance_valid(item) and not item.already_picked_up:
-			var main_scene = get_tree().current_scene
-			if main_scene:
-				if is_gold and main_scene.has_method("on_gold_picked_up"):
-					main_scene.on_gold_picked_up(item, player_index)
-				elif not is_gold and main_scene.has_method("on_consumable_picked_up"):
-					main_scene.on_consumable_picked_up(item, player_index)
+			if item.has_meta("net_item_id") and item.get_meta("net_item_id") != item_id:
+				return
+			if is_gold and main_scene.has_method("on_gold_picked_up"):
+				main_scene.on_gold_picked_up(item, player_index)
+			elif not is_gold and main_scene.has_method("on_consumable_picked_up"):
+				main_scene.on_consumable_picked_up(item, player_index)
 
 remotesync func rpc_remove_ground_item(item_id: int, is_gold: bool) -> void:
 	if ground_items.has(item_id):
@@ -1232,6 +1280,10 @@ func get_resource_path(res: Resource) -> String:
 			var found = item_service.get_element(item_service.items, res.my_id)
 			if not found:
 				found = item_service.get_element(item_service.weapons, res.my_id)
+			if not found and "upgrades" in item_service:
+				found = item_service.get_element(item_service.upgrades, res.my_id)
+			if not found and "characters" in item_service:
+				found = item_service.get_element(item_service.characters, res.my_id)
 			if found and found.resource_path != "":
 				return found.resource_path
 	return ""
@@ -1240,17 +1292,22 @@ func _serialize_shop_items(shop_items_array: Array) -> Array:
 	var result: Array = []
 	for entry in shop_items_array:
 		if entry is Array and entry.size() > 0 and entry[0] != null:
-			var res_path: String = get_resource_path(entry[0])
+			var item_res = entry[0]
+			var res_path: String = get_resource_path(item_res)
 			var second_val = entry[1] if entry.size() > 1 else false
-			result.append([res_path, second_val])
+			var is_cursed: bool = item_res.get("is_cursed") == true
+			result.append([res_path, second_val, is_cursed])
 	return result
 
 func _deserialize_shop_items(serialized: Array) -> Array:
 	var result: Array = []
+	var dlc = ProgressData.get_dlc_data("abyssal_terrors") if (ProgressData and ProgressData.has_method("get_dlc_data")) else null
 	for entry in serialized:
 		if entry is Array and entry.size() >= 2 and entry[0] != "":
 			var res = load(entry[0])
 			if res:
+				if entry.size() >= 3 and entry[2] == true and dlc and dlc.has_method("curse_item"):
+					res = dlc.curse_item(res, 0, false)
 				result.append([res, entry[1]])
 	return result
 
@@ -1271,29 +1328,77 @@ remotesync func rpc_sync_initial_shop_items(all_shops: Dictionary) -> void:
 						if "_updating_shop_ui" in shop:
 							shop._updating_shop_ui = false
 
+func _get_shop_player_container(shop: Node, player_index: int) -> Node:
+	if not shop:
+		return null
+	if shop.has_method("_get_coop_player_container"):
+		var c = shop._get_coop_player_container(player_index)
+		if c:
+			return c
+	var cont = shop.get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer" + str(player_index + 1))
+	if cont:
+		return cont
+	return shop.find_node("CoopShopPlayerContainer" + str(player_index + 1), true, false)
+
+func _get_upgrades_player_container(upgrades_ui: Node, player_index: int) -> Node:
+	if not upgrades_ui:
+		return null
+	if upgrades_ui.has_method("_get_player_container"):
+		var c = upgrades_ui._get_player_container(player_index)
+		if c:
+			return c
+	var cont = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+	if not cont:
+		cont = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
+	if not cont:
+		cont = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+	if not cont:
+		cont = upgrades_ui.find_node("*UpgradesUIPlayerContainer" + str(player_index + 1), true, false)
+	return cont
+
 remote func rpc_request_shop_buy(player_index: int, slot_idx: int) -> void:
 	if not is_host():
 		return
+	var sender_id = get_tree().get_rpc_sender_id()
+	if sender_id != 0 and peer_to_player_index.get(sender_id, -1) != player_index:
+		return
 	NetworkLogger.info("Host: Received shop BUY request from player %d for slot %d" % [player_index, slot_idx], "CoopAnything")
 	var shop = get_tree().current_scene
+	var bought_ok = false
 	if shop:
-		var container = shop.get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer" + str(player_index + 1))
-		if container:
-			var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
-			if items_vbox:
-				var item = null
-				if items_vbox.has_method("get_shop_item_node"):
-					item = items_vbox.get_shop_item_node(slot_idx)
-				elif slot_idx < items_vbox.get_child_count():
-					item = items_vbox.get_child(slot_idx)
-				
-				if item and item.has_method("_on_BuyButton_pressed"):
-					var gold_before = RunData.get_player_gold(player_index)
-					var item_res_path = get_resource_path(item.item_data) if (item.get("item_data") != null) else ""
-					item._on_BuyButton_pressed()
-					var gold_after = RunData.get_player_gold(player_index)
-					NetworkLogger.success("Host: Executed BUY for player %d on slot %d (Gold: %d -> %d)" % [player_index, slot_idx, gold_before, gold_after], "CoopAnything")
-					# Note: item._on_BuyButton_pressed triggers shop.on_shop_item_bought(), which already broadcasts rpc_confirm_shop_buy.
+		var cont = shop._get_shop_items_container(player_index) if shop.has_method("_get_shop_items_container") else null
+		var item = null
+		if cont and cont.has_method("get_shop_item_node"):
+			item = cont.get_shop_item_node(slot_idx)
+		else:
+			var container = _get_shop_player_container(shop, player_index)
+			if container:
+				var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
+				if items_vbox:
+					if items_vbox.has_method("get_shop_item_node"):
+						item = items_vbox.get_shop_item_node(slot_idx)
+					elif slot_idx < items_vbox.get_child_count():
+						item = items_vbox.get_child(slot_idx)
+		
+		if item and item.has_method("_on_BuyButton_pressed") and item.active:
+			var gold_before = RunData.get_player_gold(player_index)
+			item._on_BuyButton_pressed()
+			var gold_after = RunData.get_player_gold(player_index)
+			if not item.active or gold_after < gold_before:
+				bought_ok = true
+				NetworkLogger.success("Host: Executed BUY for player %d on slot %d (Gold: %d -> %d)" % [player_index, slot_idx, gold_before, gold_after], "CoopAnything")
+	
+	if not bought_ok and sender_id != 0:
+		rpc_id(sender_id, "rpc_reject_shop_buy", player_index, slot_idx, RunData.get_player_gold(player_index))
+
+remotesync func rpc_reject_shop_buy(player_index: int, slot_idx: int, authoritative_gold: int) -> void:
+	NetworkLogger.warn("Shop buy rejected for player %d slot %d, syncing gold: %d" % [player_index, slot_idx, authoritative_gold], "CoopAnything")
+	if RunData and player_index < RunData.players_data.size():
+		RunData.players_data[player_index].gold = authoritative_gold
+		RunData.emit_signal("gold_changed", authoritative_gold, player_index)
+	var shop = get_tree().current_scene
+	if shop and "_buy_pending_slots" in shop:
+		shop._buy_pending_slots.erase(slot_idx)
 
 remotesync func rpc_confirm_shop_buy(player_index: int, slot_idx: int, updated_gold: int, item_res_path: String = "") -> void:
 	NetworkLogger.info("Confirmed shop buy for player %d (slot %d, remaining gold: %d)" % [player_index, slot_idx, updated_gold], "CoopAnything")
@@ -1310,17 +1415,21 @@ remotesync func rpc_confirm_shop_buy(player_index: int, slot_idx: int, updated_g
 					RunData.add_item(data, player_index)
 		var shop = get_tree().current_scene
 		if shop:
-			var container = shop.get_node_or_null("Content/HBoxContainer2/CoopShopPlayerContainer" + str(player_index + 1))
-			if container:
-				var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
-				if items_vbox:
-					var item = null
-					if items_vbox.has_method("get_shop_item_node"):
-						item = items_vbox.get_shop_item_node(slot_idx)
-					elif slot_idx < items_vbox.get_child_count():
-						item = items_vbox.get_child(slot_idx)
-					if item and item.has_method("deactivate"):
-						item.deactivate()
+			var cont = shop._get_shop_items_container(player_index) if shop.has_method("_get_shop_items_container") else null
+			var item = null
+			if cont and cont.has_method("get_shop_item_node"):
+				item = cont.get_shop_item_node(slot_idx)
+			else:
+				var container = _get_shop_player_container(shop, player_index)
+				if container:
+					var items_vbox = container.get_node_or_null("MarginContainer/Carousel/Content/VBoxContainer/PanelContainer/ShopItemsContainer")
+					if items_vbox:
+						if items_vbox.has_method("get_shop_item_node"):
+							item = items_vbox.get_shop_item_node(slot_idx)
+						elif slot_idx < items_vbox.get_child_count():
+							item = items_vbox.get_child(slot_idx)
+			if item and item.has_method("deactivate"):
+				item.deactivate()
 			if "_buy_pending_slots" in shop:
 				shop._buy_pending_slots.erase(slot_idx)
 	call_deferred("capture_screen", "08_shop_after_client_buy")
@@ -1404,11 +1513,7 @@ remote func rpc_request_upgrade(player_index: int, slot_idx: int) -> void:
 	var scene = get_tree().current_scene
 	var upgrades_ui = _find_upgrades_ui(scene)
 	if upgrades_ui:
-		var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+		var container = _get_upgrades_player_container(upgrades_ui, player_index)
 		if container:
 			var cards = []
 			if container.has_method("_get_upgrade_uis"):
@@ -1430,11 +1535,7 @@ remotesync func rpc_confirm_upgrade(player_index: int, slot_idx: int) -> void:
 		if upgrades_ui.get("_upgrade_choice_pending") == true:
 			upgrades_ui._upgrade_choice_pending = false
 		else:
-			var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-			if not container:
-				container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-			if not container:
-				container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+			var container = _get_upgrades_player_container(upgrades_ui, player_index)
 			if container and container.has_method("_get_upgrade_uis"):
 				var cards = container._get_upgrade_uis()
 				if slot_idx < cards.size() and cards[slot_idx].has_method("_on_ChooseButton_pressed"):
@@ -1448,11 +1549,7 @@ remote func rpc_request_crate_take(player_index: int) -> void:
 	var scene = get_tree().current_scene
 	var upgrades_ui = _find_upgrades_ui(scene)
 	if upgrades_ui:
-		var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+		var container = _get_upgrades_player_container(upgrades_ui, player_index)
 		if container:
 			if container.has_method("_on_TakeButton_pressed"):
 				container._on_TakeButton_pressed()
@@ -1467,11 +1564,7 @@ remotesync func rpc_confirm_crate_take(player_index: int) -> void:
 		if upgrades_ui.get("_crate_choice_pending") == true:
 			upgrades_ui._crate_choice_pending = false
 		else:
-			var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-			if not container:
-				container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-			if not container:
-				container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+			var container = _get_upgrades_player_container(upgrades_ui, player_index)
 			if container and container.has_method("_on_TakeButton_pressed"):
 				container._on_TakeButton_pressed()
 	call_deferred("capture_screen", "11_crate_item_taken")
@@ -1483,11 +1576,7 @@ remote func rpc_request_crate_discard(player_index: int) -> void:
 	var scene = get_tree().current_scene
 	var upgrades_ui = _find_upgrades_ui(scene)
 	if upgrades_ui:
-		var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-		if not container:
-			container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+		var container = _get_upgrades_player_container(upgrades_ui, player_index)
 		if container and container.has_method("_on_DiscardButton_pressed"):
 			container._on_DiscardButton_pressed()
 			NetworkLogger.success("Host: Recycled crate item for player %d" % player_index, "CoopAnything")
@@ -1501,13 +1590,10 @@ remotesync func rpc_confirm_crate_discard(player_index: int) -> void:
 		if upgrades_ui.get("_crate_choice_pending") == true:
 			upgrades_ui._crate_choice_pending = false
 		else:
-			var container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-			if not container:
-				container = upgrades_ui.get_node_or_null("MarginContainer/VBoxContainer/HBoxContainer2/UpgradesUIPlayerContainer" + str(player_index + 1))
-			if not container:
-				container = upgrades_ui.get_node_or_null("Content/HBoxContainer2/CoopUpgradesUIPlayerContainer" + str(player_index + 1))
+			var container = _get_upgrades_player_container(upgrades_ui, player_index)
 			if container and container.has_method("_on_DiscardButton_pressed"):
 				container._on_DiscardButton_pressed()
+	call_deferred("capture_screen", "11_crate_item_discarded")
 	call_deferred("capture_screen", "11_crate_item_discarded")
 
 remote func rpc_client_finished_all_upgrades(player_index: int) -> void:
@@ -1688,6 +1774,7 @@ remotesync func rpc_notify_shop_ready(player_index: int, is_ready: bool) -> void
 				var effects = RunData.get_player_effects(p)
 				if effects.has(Keys.item_hourglass_hash) and effects[Keys.item_hourglass_hash] > 0:
 					next_wave -= effects[Keys.item_hourglass_hash]
+			next_wave = max(1, next_wave)
 			rpc("rpc_all_ready_advance_wave", next_wave)
 
 remotesync func rpc_all_ready_advance_wave(next_wave: int = -1) -> void:

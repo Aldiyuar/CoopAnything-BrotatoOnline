@@ -80,6 +80,8 @@ func _setup_upgrades_network() -> void:
 func _on_client_upgrade_chosen(slot_idx: int) -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
+		if _upgrade_choice_pending:
+			return
 		_upgrade_choice_pending = true
 		NetworkLogger.info("Client: Clicked upgrade card %d for player %d, sending RPC to host..." % [slot_idx, net.my_player_index], "CoopAnything")
 		net.rpc_id(1, "rpc_request_upgrade", net.my_player_index, slot_idx)
@@ -87,6 +89,8 @@ func _on_client_upgrade_chosen(slot_idx: int) -> void:
 func _on_client_crate_taken() -> void:
 	var net = get_node_or_null("/root/NetworkManager")
 	if net and net.is_client():
+		if _crate_choice_pending:
+			return
 		_crate_choice_pending = true
 		NetworkLogger.info("Client: Clicked crate TAKE for player %d, sending RPC to host..." % net.my_player_index, "CoopAnything")
 		net.rpc_id(1, "rpc_request_crate_take", net.my_player_index)

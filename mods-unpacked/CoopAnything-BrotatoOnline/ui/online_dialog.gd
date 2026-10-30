@@ -144,6 +144,15 @@ func _go_to_character_select():
 	var _err = get_tree().change_scene(MenuData.character_selection_scene)
 
 func _on_close_pressed():
+	var net = get_node_or_null("/root/NetworkManager")
+	if net and net.is_online():
+		net.close_session()
+	var run_data = get_node_or_null("/root/RunData")
+	if run_data and run_data.has_method("set_coop_run"):
+		run_data.set_coop_run(false)
+	status_label.text = "Status: Idle"
+	host_btn.disabled = false
+	join_btn.disabled = false
 	hide()
 
 func _on_role_changed(new_role):

@@ -17,16 +17,19 @@ func get_movement() -> Vector2:
 			_last_sent_movement = Vector2.ZERO
 			if _net_mgr.is_client():
 				_net_mgr.client_input_seq += 1
-				_net_mgr.rpc_unreliable_id(1, "rpc_send_player_input", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, _net_mgr.client_input_seq)
+				_net_mgr.rpc_id(1, "rpc_send_player_input", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, _net_mgr.client_input_seq)
 			elif _net_mgr.is_host():
-				_net_mgr.rpc_unreliable("rpc_broadcast_host_input", 0.0, 0.0, 0.0, 0.0)
+				_net_mgr.rpc("rpc_broadcast_host_input", 0.0, 0.0, 0.0, 0.0)
 		return Vector2.ZERO
 	
-	# If this player is a remote network player on the Host (virtual device >= 100)
+	# If this player is a remote network player (virtual device >= 100)
 	if device >= 100:
-		var remote_player_idx = device - 100
-		if _net_mgr.player_inputs.has(remote_player_idx):
-			return _net_mgr.player_inputs[remote_player_idx].movement
+		# On Host, remote puppet moves via simulated player input from Client
+		# On Client, remote puppet is purely interpolated via net_target_pos; no local move_and_slide
+		if _net_mgr.is_host():
+			var remote_player_idx = device - 100
+			if _net_mgr.player_inputs.has(remote_player_idx):
+				return _net_mgr.player_inputs[remote_player_idx].movement
 		return Vector2.ZERO
 	
 	# If this is local player input
